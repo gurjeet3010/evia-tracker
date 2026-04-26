@@ -6,8 +6,8 @@ import { Flower2, Mail, Lock } from "lucide-react";
 export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
-      { title: "Sign in — Bloom" },
-      { name: "description", content: "Sign in to Bloom to track your menstrual cycle." },
+      { title: "Sign in — Evia" },
+      { name: "description", content: "Sign in to Evia to track your menstrual cycle." },
     ],
   }),
   component: LoginPage,
@@ -52,7 +52,7 @@ function LoginPage() {
             <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-gradient-pink shadow-glow">
               <Flower2 className="h-8 w-8 text-primary-foreground" />
             </div>
-            <h1 className="mt-5 text-3xl font-bold tracking-tight">Welcome to Bloom</h1>
+            <h1 className="mt-5 text-3xl font-bold tracking-tight">Welcome to Evia</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {mode === "login" ? "Sign in to continue your journey" : "Create an account to start tracking"}
             </p>
@@ -129,7 +129,7 @@ function LoginPage() {
           <p className="mt-6 text-center text-xs text-muted-foreground">
             Your data stays on your device. <br />
             <Link to="/learn" className="font-semibold text-primary hover:underline">
-              Learn more about Bloom
+              Learn more about Evia
             </Link>
           </p>
         </div>
