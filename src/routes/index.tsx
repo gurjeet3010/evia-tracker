@@ -17,7 +17,7 @@ function Index() {
     <div className="flex min-h-screen items-center justify-center bg-gradient-soft">
       <div className="flex flex-col items-center gap-3">
         <div className="h-12 w-12 animate-pulse rounded-full bg-gradient-pink shadow-glow" />
-        <p className="text-sm font-medium text-muted-foreground">Bloom</p>
+        <p className="text-sm font-medium text-muted-foreground">Evia</p>
       </div>
     </div>
   );

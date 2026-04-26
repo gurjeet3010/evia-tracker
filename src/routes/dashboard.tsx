@@ -8,7 +8,7 @@ import { useMemo } from "react";
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
     meta: [
-      { title: "Today — Bloom" },
+      { title: "Today — Evia" },
       { name: "description", content: "Your cycle at a glance — current day, next ovulation, and upcoming phases." },
     ],
   }),

@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
 export const Route = createFileRoute("/calendar")({
   head: () => ({
     meta: [
-      { title: "Calendar — Bloom" },
+      { title: "Calendar — Evia" },
       { name: "description", content: "Monthly calendar of your menstrual cycle, ovulation, and fertility window." },
     ],
   }),

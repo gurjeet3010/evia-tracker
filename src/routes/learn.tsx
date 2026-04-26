@@ -5,7 +5,7 @@ import { Droplet, FlaskConical, Brain, Sun, HeartHandshake } from "lucide-react"
 export const Route = createFileRoute("/learn")({
   head: () => ({
     meta: [
-      { title: "Learn — Bloom" },
+      { title: "Learn — Evia" },
       { name: "description", content: "Friendly guides to understanding the menstrual cycle, hormones, mood, menopause, and how to support a partner." },
     ],
   }),

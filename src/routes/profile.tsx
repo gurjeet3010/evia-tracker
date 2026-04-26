@@ -7,7 +7,7 @@ import { LogOut, Save, Check } from "lucide-react";
 export const Route = createFileRoute("/profile")({
   head: () => ({
     meta: [
-      { title: "Profile — Bloom" },
+      { title: "Profile — Evia" },
       { name: "description", content: "Update your cycle settings and personal preferences." },
     ],
   }),
