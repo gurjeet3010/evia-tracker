@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, type FormEvent } from "react";
-import { signIn, signUp } from "@/lib/auth";
+import { signIn, signUp, isOnboarded } from "@/lib/auth";
 import { Flower2, Mail, Lock } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
@@ -37,7 +37,11 @@ function LoginPage() {
       setError(result.error ?? "Something went wrong.");
       return;
     }
-    navigate({ to: "/dashboard", replace: true });
+    if (mode === "signup" || !isOnboarded()) {
+      navigate({ to: "/onboarding", replace: true });
+    } else {
+      navigate({ to: "/dashboard", replace: true });
+    }
   }
 
   return (
