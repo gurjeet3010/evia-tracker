@@ -30,7 +30,7 @@ function writeUsers(users: StoredUser[]) {
   safeStorage()?.setItem(USERS_KEY, JSON.stringify(users));
 }
 
-export function signUp(email: string, password: string): { ok: boolean; error?: string } {
+export function signUp(email: string, password: string): { ok: boolean; error?: string; isNew?: boolean } {
   const users = readUsers();
   if (users.some((u) => u.email === email)) {
     return { ok: false, error: "An account with this email already exists." };
@@ -38,7 +38,7 @@ export function signUp(email: string, password: string): { ok: boolean; error?: 
   users.push({ email, password });
   writeUsers(users);
   safeStorage()?.setItem(AUTH_KEY, email);
-  return { ok: true };
+  return { ok: true, isNew: true };
 }
 
 export function signIn(email: string, password: string): { ok: boolean; error?: string } {
@@ -60,7 +60,7 @@ export function getUserData(): UserData | null {
   if (!email) return null;
   const raw = safeStorage()?.getItem(`${DATA_KEY}:${email}`);
   if (!raw) {
-    // Default seed
+    // Default seed for users who haven't completed onboarding
     const today = new Date();
     today.setDate(today.getDate() - 7);
     return {
@@ -68,9 +68,18 @@ export function getUserData(): UserData | null {
       lastPeriodDate: today.toISOString().slice(0, 10),
       cycleLength: 28,
       periodLength: 5,
+      onboarded: false,
     };
   }
   try { return JSON.parse(raw) as UserData; } catch { return null; }
+}
+
+export function isOnboarded(): boolean {
+  const email = getCurrentEmail();
+  if (!email) return false;
+  const raw = safeStorage()?.getItem(`${DATA_KEY}:${email}`);
+  if (!raw) return false;
+  try { return !!(JSON.parse(raw) as UserData).onboarded; } catch { return false; }
 }
 
 export function saveUserData(data: UserData) {

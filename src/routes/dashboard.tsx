@@ -48,8 +48,12 @@ function DashboardContent() {
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{greeting}</p>
-          <h1 className="text-2xl font-bold tracking-tight">Today</h1>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {greeting}{user.name ? `, ${user.name}` : ""}
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {user.trackingFor === "partner" ? "Partner's day" : "Today"}
+          </h1>
         </div>
         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-pink shadow-soft">
           <Flower2 className="h-5 w-5 text-primary-foreground" />

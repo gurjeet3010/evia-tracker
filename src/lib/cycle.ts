@@ -1,10 +1,15 @@
 // Cycle calculation utilities
 
+export type TrackingFor = "self" | "partner";
+
 export type UserData = {
   email: string;
   lastPeriodDate: string; // ISO date
   cycleLength: number;
   periodLength: number;
+  name?: string;
+  trackingFor?: TrackingFor;
+  onboarded?: boolean;
 };
 
 export type Phase = "period" | "fertile" | "ovulation" | "luteal" | "follicular" | "pms";
