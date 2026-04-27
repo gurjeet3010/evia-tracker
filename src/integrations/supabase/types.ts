@@ -14,7 +14,105 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      daily_logs: {
+        Row: {
+          created_at: string
+          id: string
+          log_date: string
+          mood: string | null
+          notes: string | null
+          symptoms: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          log_date: string
+          mood?: string | null
+          notes?: string | null
+          symptoms?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          log_date?: string
+          mood?: string | null
+          notes?: string | null
+          symptoms?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      period_history: {
+        Row: {
+          created_at: string
+          end_date: string | null
+          id: string
+          notes: string | null
+          start_date: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          notes?: string | null
+          start_date: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          end_date?: string | null
+          id?: string
+          notes?: string | null
+          start_date?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          cycle_length: number
+          id: string
+          last_period_start: string | null
+          name: string | null
+          onboarded: boolean
+          period_length: number
+          tracking_for: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cycle_length?: number
+          id: string
+          last_period_start?: string | null
+          name?: string | null
+          onboarded?: boolean
+          period_length?: number
+          tracking_for?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cycle_length?: number
+          id?: string
+          last_period_start?: string | null
+          name?: string | null
+          onboarded?: boolean
+          period_length?: number
+          tracking_for?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
