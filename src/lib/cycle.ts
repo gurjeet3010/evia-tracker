@@ -3,18 +3,41 @@
 export type TrackingFor = "self" | "partner";
 
 export type UserData = {
-  email: string;
-  lastPeriodDate: string; // ISO date
+  email?: string;
+  lastPeriodDate: string; // ISO date (yyyy-mm-dd)
   cycleLength: number;
   periodLength: number;
-  name?: string;
+  name?: string | null;
   trackingFor?: TrackingFor;
   onboarded?: boolean;
 };
 
+// Convert a Profile row from the database into UserData for cycle math.
+export function profileToUserData(p: {
+  name: string | null;
+  tracking_for: "self" | "partner";
+  cycle_length: number;
+  period_length: number;
+  last_period_start: string | null;
+  onboarded: boolean;
+}): UserData {
+  const today = new Date();
+  const fallback = new Date(today);
+  fallback.setDate(today.getDate() - 7);
+  return {
+    name: p.name,
+    trackingFor: p.tracking_for,
+    cycleLength: p.cycle_length,
+    periodLength: p.period_length,
+    lastPeriodDate: p.last_period_start ?? fallback.toISOString().slice(0, 10),
+    onboarded: p.onboarded,
+  };
+}
+
 export type Phase = "period" | "fertile" | "ovulation" | "luteal" | "follicular" | "pms";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
 
 export function startOfDay(d: Date | string): Date {
   const date = typeof d === "string" ? new Date(d) : new Date(d);
