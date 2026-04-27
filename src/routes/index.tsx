@@ -37,14 +37,14 @@ function Index() {
         className={`pointer-events-none absolute left-1/2 top-1/2 h-[110vh] w-[110vh] -translate-x-1/2 -translate-y-[40%] rounded-full blur-3xl transition-opacity duration-700 ${show ? "opacity-100" : "opacity-0"}`}
         style={{
           background:
-            "radial-gradient(circle at 30% 30%, #ffb3c7 0%, transparent 55%), radial-gradient(circle at 70% 40%, #ffa17a 0%, transparent 50%), radial-gradient(circle at 60% 70%, #c79bf2 0%, transparent 55%)",
+            "radial-gradient(circle at 30% 30%, #F5D5E0 0%, transparent 55%), radial-gradient(circle at 70% 40%, #6667AB 0%, transparent 50%), radial-gradient(circle at 60% 70%, #7B337E 0%, transparent 55%)",
         }}
       />
       <div
         className={`pointer-events-none absolute left-1/2 top-1/2 h-[70vh] w-[70vh] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-80 blur-2xl ${show ? "" : ""}`}
         style={{
           background:
-            "radial-gradient(circle, #ff9bb6 0%, #d59bee 60%, transparent 100%)",
+            "radial-gradient(circle, #7B337E 0%, #420D4B 60%, transparent 100%)",
         }}
       />
 

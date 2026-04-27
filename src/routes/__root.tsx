@@ -32,7 +32,7 @@ export const Route = createRootRoute({
       { title: "Evia — Your Cycle, Your Rhythm" },
       { name: "description", content: "A calm, supportive menstrual cycle tracker. Track your period, ovulation, fertility window, and learn about your body." },
       { name: "author", content: "Evia" },
-      { name: "theme-color", content: "#ff7eb3" },
+      { name: "theme-color", content: "#7B337E" },
       { property: "og:title", content: "Evia — Your Cycle, Your Rhythm" },
       { property: "og:description", content: "A calm, supportive menstrual cycle tracker." },
       { property: "og:type", content: "website" },
