@@ -1,24 +1,19 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
-import { getCurrentEmail } from "@/lib/auth";
+import { useEffect, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useAuth } from "@/lib/AuthProvider";
 import { BottomNav } from "./BottomNav";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
-  const router = useRouter();
-  const [ready, setReady] = useState(false);
+  const { user, loading } = useAuth();
 
   useEffect(() => {
-    const email = getCurrentEmail();
-    if (!email) {
+    if (!loading && !user) {
       navigate({ to: "/login" });
-    } else {
-      setReady(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router.state.location.pathname]);
+  }, [loading, user, navigate]);
 
-  if (!ready) {
+  if (loading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-soft">
         <div className="h-10 w-10 animate-pulse rounded-full bg-gradient-pink" />

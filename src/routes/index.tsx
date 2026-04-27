@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { getCurrentEmail } from "@/lib/auth";
-import { isOnboarded } from "@/lib/auth";
+import { useAuth } from "@/lib/AuthProvider";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -15,18 +14,18 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   const navigate = useNavigate();
+  const { user, profile, loading } = useAuth();
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    // Brief splash, then route based on auth state
     const t = setTimeout(() => setShow(true), 50);
     return () => clearTimeout(t);
   }, []);
 
   const handleStart = () => {
-    const email = getCurrentEmail();
-    if (!email) return navigate({ to: "/login" });
-    if (!isOnboarded()) return navigate({ to: "/onboarding" });
+    if (loading) return;
+    if (!user) return navigate({ to: "/login" });
+    if (!profile?.onboarded) return navigate({ to: "/onboarding" });
     navigate({ to: "/dashboard" });
   };
 

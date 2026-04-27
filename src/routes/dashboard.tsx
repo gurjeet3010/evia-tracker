@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { getUserData } from "@/lib/auth";
-import { computeCycle, formatDate, addDays, startOfDay, isSameDay, getDayMarker } from "@/lib/cycle";
+import { useAuth } from "@/lib/AuthProvider";
+import { computeCycle, formatDate, addDays, startOfDay, isSameDay, getDayMarker, profileToUserData } from "@/lib/cycle";
 import { Bell, Droplet, Sparkles, Heart } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -26,12 +26,14 @@ function DashboardPage() {
 const WEEKDAY_SHORT = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
 function DashboardContent() {
-  const user = useMemo(() => getUserData(), []);
+  const { profile } = useAuth();
   const today = startOfDay(new Date());
   const [selected, setSelected] = useState<Date>(today);
 
-  if (!user) return null;
-  const info = useMemo(() => computeCycle(user, today), [user]);
+  const user = useMemo(() => (profile ? profileToUserData(profile) : null), [profile]);
+  const info = useMemo(() => (user ? computeCycle(user, today) : null), [user]);
+  if (!user || !info) return null;
+
 
   // 7-day strip centered around today
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i - 3));

@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
-import { signIn, signUp, isOnboarded } from "@/lib/auth";
+import { useEffect, useState, type FormEvent } from "react";
+import { useAuth } from "@/lib/AuthProvider";
 import { Flower2, Mail, Lock } from "lucide-react";
 
 export const Route = createFileRoute("/login")({
@@ -15,12 +15,21 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { user, profile, loading, signIn, signUp } = useAuth();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  function handleSubmit(e: FormEvent) {
+  // If already signed in, redirect appropriately
+  useEffect(() => {
+    if (loading || !user) return;
+    if (profile && !profile.onboarded) navigate({ to: "/onboarding", replace: true });
+    else if (profile?.onboarded) navigate({ to: "/dashboard", replace: true });
+  }, [loading, user, profile, navigate]);
+
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     const emailTrim = email.trim().toLowerCase();
@@ -32,21 +41,22 @@ function LoginPage() {
       setError("Password must be at least 6 characters.");
       return;
     }
-    const result = mode === "login" ? signIn(emailTrim, password) : signUp(emailTrim, password);
+    setBusy(true);
+    const result =
+      mode === "login"
+        ? await signIn(emailTrim, password)
+        : await signUp(emailTrim, password);
+    setBusy(false);
     if (!result.ok) {
       setError(result.error ?? "Something went wrong.");
       return;
     }
-    if (mode === "signup" || !isOnboarded()) {
-      navigate({ to: "/onboarding", replace: true });
-    } else {
-      navigate({ to: "/dashboard", replace: true });
-    }
+    // Auth listener will set user/profile; redirect handled in useEffect.
+    if (mode === "signup") navigate({ to: "/onboarding", replace: true });
   }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-soft">
-      {/* Decorative blobs */}
       <div className="pointer-events-none absolute -top-32 -right-20 h-72 w-72 rounded-full bg-gradient-pink opacity-40 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -left-20 h-80 w-80 rounded-full bg-gradient-purple opacity-40 blur-3xl" />
 
@@ -80,9 +90,7 @@ function LoginPage() {
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground" htmlFor="email">
-                  Email
-                </label>
+                <label className="text-xs font-semibold text-muted-foreground" htmlFor="email">Email</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -98,9 +106,7 @@ function LoginPage() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-muted-foreground" htmlFor="password">
-                  Password
-                </label>
+                <label className="text-xs font-semibold text-muted-foreground" htmlFor="password">Password</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <input
@@ -123,15 +129,16 @@ function LoginPage() {
 
               <button
                 type="submit"
-                className="w-full rounded-2xl bg-gradient-pink py-3.5 text-sm font-semibold text-primary-foreground shadow-soft transition-transform hover:scale-[1.02] active:scale-[0.98]"
+                disabled={busy}
+                className="w-full rounded-2xl bg-gradient-pink py-3.5 text-sm font-semibold text-primary-foreground shadow-soft transition-transform hover:scale-[1.02] active:scale-[0.98] disabled:opacity-60"
               >
-                {mode === "login" ? "Sign in" : "Create account"}
+                {busy ? "Please wait…" : mode === "login" ? "Sign in" : "Create account"}
               </button>
             </form>
           </div>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            Your data stays on your device. <br />
+            Your data is securely synced to your account. <br />
             <Link to="/learn" className="font-semibold text-primary hover:underline">
               Learn more about Evia
             </Link>
