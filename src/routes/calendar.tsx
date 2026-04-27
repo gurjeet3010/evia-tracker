@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
-import { getUserData } from "@/lib/auth";
-import { computeCycle, getDayMarker, isSameDay, startOfDay } from "@/lib/cycle";
+import { useAuth } from "@/lib/AuthProvider";
+import { computeCycle, getDayMarker, isSameDay, startOfDay, profileToUserData } from "@/lib/cycle";
 import { ChevronLeft, ChevronRight, Pencil, Droplet, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -28,13 +28,15 @@ type Filter = "period" | "fertile" | "pms" | "all";
 
 function CalendarContent() {
   const navigate = useNavigate();
-  const user = useMemo(() => getUserData(), []);
+  const { profile } = useAuth();
   const today = startOfDay(new Date());
   const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
   const [filter, setFilter] = useState<Filter>("all");
 
-  if (!user) return null;
-  const info = useMemo(() => computeCycle(user, today), [user]);
+  const user = useMemo(() => (profile ? profileToUserData(profile) : null), [profile]);
+  const info = useMemo(() => (user ? computeCycle(user, today) : null), [user]);
+  if (!user || !info) return null;
+
 
   const monthLabel = viewMonth.toLocaleDateString(undefined, { month: "long", year: "numeric" });
   const firstWeekday = viewMonth.getDay();
