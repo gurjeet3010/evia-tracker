@@ -1,9 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { getUserData } from "@/lib/auth";
-import { computeCycle, formatDate, formatRange, addDays } from "@/lib/cycle";
-import { Droplet, Sparkles, Heart, Flower2, ChevronRight } from "lucide-react";
-import { useMemo } from "react";
+import { computeCycle, formatDate, addDays, startOfDay, isSameDay, getDayMarker } from "@/lib/cycle";
+import { Bell, Droplet, Sparkles, Heart } from "lucide-react";
+import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({
@@ -23,108 +23,203 @@ function DashboardPage() {
   );
 }
 
+const WEEKDAY_SHORT = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+
 function DashboardContent() {
   const user = useMemo(() => getUserData(), []);
+  const today = startOfDay(new Date());
+  const [selected, setSelected] = useState<Date>(today);
+
   if (!user) return null;
-  const info = useMemo(() => computeCycle(user), [user]);
+  const info = useMemo(() => computeCycle(user, today), [user]);
 
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 18) return "Good afternoon";
-    return "Good evening";
-  })();
+  // 7-day strip centered around today
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i - 3));
 
-  const phaseLabel: Record<string, string> = {
-    period: "On your period",
-    fertile: "Fertile window",
-    ovulation: "Ovulation day",
-    luteal: "Luteal phase",
-    follicular: "Follicular phase",
-    pms: "PMS phase",
+  const monthLabel = today.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+
+  const phaseTitle: Record<string, string> = {
+    period: "Period",
+    fertile: "Fertile",
+    ovulation: "Ovulation",
+    luteal: "Luteal",
+    follicular: "Follicular",
+    pms: "PMS",
   };
 
+  const heroDay = info.currentPhase === "period" ? info.currentDay : info.currentDay;
+  const heroSubtitle =
+    info.currentPhase === "period"
+      ? `Next ovulation in ${info.daysUntilOvulation > 0 ? info.daysUntilOvulation : info.cycleLength + info.daysUntilOvulation} days`
+      : info.currentPhase === "ovulation"
+      ? `Ovulation today · Next period in ${info.daysUntilNextPeriod}d`
+      : info.currentPhase === "fertile"
+      ? `Ovulation in ${Math.max(info.daysUntilOvulation, 0)} days`
+      : `Next period in ${info.daysUntilNextPeriod} days`;
+
+  // Build timeline upcoming events
+  const timeline = [
+    {
+      key: "period-now",
+      date: info.lastPeriodStart,
+      end: addDays(info.lastPeriodStart, info.periodLength - 1),
+      title: "Period",
+      sub: `${info.periodLength} days`,
+      icon: <Droplet className="h-4 w-4" />,
+      tone: "bg-gradient-period text-white",
+      ring: "border-[var(--period)]",
+    },
+    {
+      key: "fertile",
+      date: info.fertileStart,
+      end: info.fertileEnd,
+      title: "Fertility window",
+      sub: `Ovulation ${formatDate(info.ovulationDate)}`,
+      icon: <Sparkles className="h-4 w-4" />,
+      tone: "bg-gradient-fertile text-foreground",
+      ring: "border-[var(--fertile)]",
+    },
+    {
+      key: "pms",
+      date: info.pmsStart,
+      end: addDays(info.nextPeriodStart, -1),
+      title: "PMS",
+      sub: formatDate(info.pmsStart),
+      icon: <Heart className="h-4 w-4" />,
+      tone: "bg-gradient-pms text-foreground",
+      ring: "border-[var(--pms)]",
+    },
+    {
+      key: "next-period",
+      date: info.nextPeriodStart,
+      end: addDays(info.nextPeriodStart, info.periodLength - 1),
+      title: "Period",
+      sub: `${info.periodLength} days`,
+      icon: <Droplet className="h-4 w-4" />,
+      tone: "bg-gradient-period text-white",
+      ring: "border-[var(--period)]",
+    },
+  ].sort((a, b) => a.date.getTime() - b.date.getTime());
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            {greeting}{user.name ? `, ${user.name}` : ""}
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {user.name ? `Hi, ${user.name}` : "Hello"}
           </p>
-          <h1 className="text-2xl font-bold tracking-tight">
-            {user.trackingFor === "partner" ? "Partner's day" : "Today"}
-          </h1>
-        </div>
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-pink shadow-soft">
-          <Flower2 className="h-5 w-5 text-primary-foreground" />
+          <h1 className="text-2xl font-bold tracking-tight">{monthLabel}</h1>
         </div>
       </header>
 
-      {/* Hero card */}
-      <section className="relative overflow-hidden rounded-[28px] bg-gradient-hero p-7 text-primary-foreground shadow-glow">
-        <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-white/15 blur-2xl" />
-        <div className="absolute -bottom-16 -left-10 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+      {/* Weekday strip */}
+      <section className="flex items-center justify-between gap-1">
+        {weekDays.map((d) => {
+          const isToday = isSameDay(d, today);
+          const isSelected = isSameDay(d, selected);
+          const marker = getDayMarker(d, info);
+          const dot =
+            marker === "period" ? "bg-[var(--period)]" :
+            marker === "ovulation" ? "bg-[var(--ovulation)]" :
+            marker === "fertile" ? "bg-[var(--fertile)]" :
+            marker === "pms" ? "bg-[var(--pms)]" : "";
 
-        <div className="relative">
-          <p className="text-sm font-medium opacity-90">{phaseLabel[info.currentPhase]}</p>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-6xl font-bold leading-none">{info.currentDay}</span>
-            <span className="text-base font-medium opacity-90">/ {info.cycleLength} day cycle</span>
-          </div>
+          return (
+            <button
+              key={d.toISOString()}
+              onClick={() => setSelected(d)}
+              className="flex flex-1 flex-col items-center gap-1 py-1"
+            >
+              <span className={`text-sm font-semibold ${isToday ? "text-foreground" : "text-muted-foreground"}`}>
+                {d.getDate()}
+              </span>
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-full text-[10px] font-bold tracking-wide transition-all ${
+                  isSelected
+                    ? "bg-gradient-period text-white shadow-soft"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {WEEKDAY_SHORT[d.getDay()]}
+              </span>
+              <span className={`h-1 w-1 rounded-full ${dot}`} />
+            </button>
+          );
+        })}
+      </section>
 
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-white/15 p-3 backdrop-blur-sm">
-              <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">Next period</p>
-              <p className="mt-1 text-sm font-semibold">in {info.daysUntilNextPeriod} days</p>
-              <p className="text-[11px] opacity-80">{formatDate(info.nextPeriodStart)}</p>
-            </div>
-            <div className="rounded-2xl bg-white/15 p-3 backdrop-blur-sm">
-              <p className="text-[11px] font-medium uppercase tracking-wide opacity-80">Ovulation</p>
-              <p className="mt-1 text-sm font-semibold">
-                {info.daysUntilOvulation > 0 ? `in ${info.daysUntilOvulation} days` : info.daysUntilOvulation === 0 ? "Today" : `${Math.abs(info.daysUntilOvulation)}d ago`}
-              </p>
-              <p className="text-[11px] opacity-80">{formatDate(info.ovulationDate)}</p>
-            </div>
+      {/* Hero gradient card */}
+      <section
+        className="relative overflow-hidden rounded-[28px] p-6 text-white shadow-glow"
+        style={{
+          background:
+            "linear-gradient(135deg, #ff7eb3 0%, #ff8a73 45%, #c79bf2 100%)",
+        }}
+      >
+        <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full bg-white/20 blur-2xl" />
+        <div className="absolute -bottom-16 -left-12 h-44 w-44 rounded-full bg-white/15 blur-2xl" />
+
+        <div className="relative flex items-start justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider opacity-90">
+              {phaseTitle[info.currentPhase]}
+            </p>
+            <h2 className="mt-1 text-5xl font-bold leading-none">
+              day {heroDay}
+            </h2>
           </div>
+          <button
+            aria-label="Notifications"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm transition-colors hover:bg-white/35"
+          >
+            <Bell className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="relative mt-6 inline-block rounded-2xl bg-white/20 px-3 py-2 backdrop-blur-sm">
+          <p className="text-[11px] font-medium opacity-90">Up next</p>
+          <p className="text-sm font-semibold">{heroSubtitle}</p>
         </div>
       </section>
 
-      {/* Timeline */}
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-bold">Your timeline</h2>
-          <Link to="/calendar" className="flex items-center gap-1 text-xs font-semibold text-primary">
-            View calendar <ChevronRight className="h-3.5 w-3.5" />
-          </Link>
+      {/* Timelines */}
+      <section className="rounded-[28px] border border-border/60 bg-card p-5 shadow-soft">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-bold">Timelines</h2>
+          <span className="h-1 w-10 rounded-full bg-muted" />
         </div>
 
-        <div className="space-y-3">
-          <PhaseCard
-            title="Period"
-            range={formatRange(info.lastPeriodStart, addDays(info.lastPeriodStart, info.periodLength - 1))}
-            icon={<Droplet className="h-5 w-5" />}
-            gradient="bg-gradient-period"
-            description="Rest, hydrate, and be gentle with yourself."
-          />
-          <PhaseCard
-            title="Fertility window"
-            range={formatRange(info.fertileStart, info.fertileEnd)}
-            icon={<Sparkles className="h-5 w-5" />}
-            gradient="bg-gradient-fertile"
-            description={`Ovulation on ${formatDate(info.ovulationDate)}.`}
-            tone="light"
-          />
-          <PhaseCard
-            title="PMS phase"
-            range={formatRange(info.pmsStart, addDays(info.nextPeriodStart, -1))}
-            icon={<Heart className="h-5 w-5" />}
-            gradient="bg-gradient-pms"
-            description="Mood changes are normal — be kind to your body."
-          />
-        </div>
+        <ol className="relative space-y-4">
+          <span className="absolute left-[34px] top-2 bottom-2 w-px bg-border" aria-hidden />
+          {timeline.map((t) => (
+            <li key={t.key} className="relative flex items-center gap-4">
+              <div className="flex w-16 shrink-0 flex-col">
+                <span className="text-sm font-bold text-foreground">
+                  {t.date.toLocaleDateString(undefined, { day: "2-digit", month: "short" }).toLowerCase()}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {t.end.toLocaleDateString(undefined, { day: "2-digit", month: "short" }).toLowerCase()}
+                </span>
+              </div>
+              <div className="relative">
+                <span className={`flex h-9 w-9 items-center justify-center rounded-full ${t.tone} shadow-soft`}>
+                  {t.icon}
+                </span>
+              </div>
+              <div className="flex-1 rounded-2xl bg-secondary/60 px-4 py-3">
+                <p className="text-sm font-bold" style={{ color: "var(--period)" }}>
+                  {t.title}
+                </p>
+                <p className="text-xs text-muted-foreground">{t.sub}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
 
-      <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
+      {/* Daily tip */}
+      <section className="rounded-[28px] border border-border/60 bg-card p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Daily tip</p>
         <p className="mt-2 text-sm leading-relaxed text-foreground">
           {info.currentPhase === "period" && "💧 Stay hydrated and consider gentle stretching to ease cramps."}
@@ -135,29 +230,6 @@ function DashboardContent() {
           {info.currentPhase === "pms" && "🤍 Be patient with yourself today. Comfort foods and rest help."}
         </p>
       </section>
-    </div>
-  );
-}
-
-function PhaseCard({
-  title, range, icon, gradient, description, tone = "dark",
-}: {
-  title: string; range: string; icon: React.ReactNode; gradient: string; description: string; tone?: "dark" | "light";
-}) {
-  const text = tone === "light" ? "text-foreground" : "text-primary-foreground";
-  const sub = tone === "light" ? "text-foreground/70" : "text-primary-foreground/85";
-  return (
-    <div className={`flex items-center gap-4 rounded-3xl p-4 shadow-soft ${gradient}`}>
-      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/25 ${text}`}>
-        {icon}
-      </div>
-      <div className={`flex-1 ${text}`}>
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-bold">{title}</p>
-          <p className={`text-[11px] font-medium ${sub}`}>{range}</p>
-        </div>
-        <p className={`mt-1 text-xs leading-snug ${sub}`}>{description}</p>
-      </div>
     </div>
   );
 }
