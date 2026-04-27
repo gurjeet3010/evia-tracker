@@ -191,7 +191,7 @@ function DashboardContent() {
         </div>
 
         <ol className="relative space-y-4">
-          <span className="absolute left-[34px] top-2 bottom-2 w-px bg-border" aria-hidden />
+          <span className="absolute left-[34px] top-2 bottom-2 w-px bg-border mx-[17px] my-[5px]" aria-hidden />
           {timeline.map((t) => (
             <li key={t.key} className="relative flex items-center gap-4">
               <div className="flex w-16 shrink-0 flex-col">
