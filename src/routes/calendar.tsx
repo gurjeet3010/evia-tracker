@@ -1,8 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { getUserData } from "@/lib/auth";
 import { computeCycle, getDayMarker, isSameDay, startOfDay } from "@/lib/cycle";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Droplet, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 
 export const Route = createFileRoute("/calendar")({
@@ -23,13 +23,15 @@ function CalendarPage() {
   );
 }
 
-const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+type Filter = "period" | "fertile" | "pms" | "all";
 
 function CalendarContent() {
+  const navigate = useNavigate();
   const user = useMemo(() => getUserData(), []);
   const today = startOfDay(new Date());
   const [viewMonth, setViewMonth] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selected, setSelected] = useState<Date>(today);
+  const [filter, setFilter] = useState<Filter>("all");
 
   if (!user) return null;
   const info = useMemo(() => computeCycle(user, today), [user]);
@@ -42,111 +44,142 @@ function CalendarContent() {
     ...Array.from({ length: daysInMonth }, (_, i) => new Date(viewMonth.getFullYear(), viewMonth.getMonth(), i + 1)),
   ];
 
-  const selMarker = getDayMarker(selected, info);
-  const selLabels: Record<string, { label: string; tone: string }> = {
-    period: { label: "Period day", tone: "bg-gradient-period text-primary-foreground" },
-    ovulation: { label: "Ovulation day", tone: "bg-[var(--ovulation)] text-[var(--ovulation-foreground)]" },
-    fertile: { label: "Fertility window", tone: "bg-gradient-fertile text-foreground" },
-    pms: { label: "PMS day", tone: "bg-gradient-pms text-foreground" },
-  };
+  const filterPills: { key: Filter; label: string; cls: string }[] = [
+    { key: "period", label: "Period", cls: "border-[var(--period)] text-[var(--period)]" },
+    { key: "fertile", label: "Fertility", cls: "border-[var(--ovulation)] text-[var(--ovulation)]" },
+    { key: "pms", label: "PMS", cls: "border-[var(--pms)] text-[oklch(0.55_0.14_50)]" },
+    { key: "all", label: "All", cls: "border-border text-muted-foreground" },
+  ];
 
   return (
-    <div className="space-y-6">
-      <header>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Your cycle</p>
-        <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
+    <div className="space-y-5">
+      {/* Page header */}
+      <header className="flex items-center justify-between">
+        <button
+          onClick={() => navigate({ to: "/dashboard" })}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-foreground hover:bg-muted"
+          aria-label="Back"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <h1 className="text-base font-bold">Calendar</h1>
+        <button
+          onClick={() => navigate({ to: "/profile" })}
+          className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted"
+          aria-label="Edit"
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
       </header>
 
-      <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
-        <div className="mb-4 flex items-center justify-between">
-          <button
-            onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-muted hover:bg-accent"
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <p className="text-base font-bold">{monthLabel}</p>
-          <button
-            onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-muted hover:bg-accent"
-            aria-label="Next month"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+      {/* Month switcher */}
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-base font-bold">
+            {monthLabel} <span className="ml-1 text-muted-foreground">›</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1, 1))}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-foreground hover:bg-muted"
+              aria-label="Previous month"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1))}
+              className="flex h-8 w-8 items-center justify-center rounded-full text-foreground hover:bg-muted"
+              aria-label="Next month"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[11px] font-semibold uppercase text-muted-foreground">
+        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
           {WEEKDAYS.map((d, i) => <span key={i}>{d}</span>)}
         </div>
 
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-y-1">
           {cells.map((d, i) => {
             if (!d) return <div key={i} />;
             const marker = getDayMarker(d, info);
-            const isToday = isSameDay(d, today);
-            const isSelected = isSameDay(d, selected);
+            const visible =
+              filter === "all" ||
+              (filter === "period" && marker === "period") ||
+              (filter === "fertile" && (marker === "fertile" || marker === "ovulation")) ||
+              (filter === "pms" && marker === "pms");
 
-            const base = "relative flex h-10 w-10 items-center justify-center rounded-full text-sm font-medium transition-all mx-auto";
+            const isToday = isSameDay(d, today);
+
             const cls =
-              marker === "period" ? "bg-gradient-period text-primary-foreground shadow-soft" :
-              marker === "ovulation" ? "bg-[var(--ovulation)] text-[var(--ovulation-foreground)] shadow-soft" :
-              marker === "fertile" ? "bg-[var(--fertile)] text-[var(--fertile-foreground)]" :
-              marker === "pms" ? "bg-[var(--pms)]/40 text-foreground" :
-              "text-foreground hover:bg-muted";
+              visible && marker === "period"
+                ? "bg-gradient-period text-white shadow-soft"
+                : visible && marker === "ovulation"
+                ? "bg-[var(--ovulation)] text-[var(--ovulation-foreground)] shadow-soft"
+                : visible && marker === "fertile"
+                ? "bg-[oklch(0.85_0.09_320)] text-[var(--ovulation)]"
+                : visible && marker === "pms"
+                ? "bg-[var(--pms)]/40 text-foreground"
+                : "text-foreground";
 
             return (
-              <button
-                key={i}
-                onClick={() => setSelected(d)}
-                className={`${base} ${cls} ${isSelected ? "ring-2 ring-primary ring-offset-2 ring-offset-card" : ""}`}
-              >
-                {d.getDate()}
-                {isToday && (
-                  <span className="absolute -bottom-0.5 left-1/2 h-1 w-1 -translate-x-1/2 rounded-full bg-current" />
-                )}
-              </button>
+              <div key={i} className="flex justify-center">
+                <button
+                  className={`relative flex h-9 w-9 items-center justify-center rounded-full text-sm font-medium transition-all ${cls} ${isToday && !marker ? "ring-1 ring-border" : ""}`}
+                >
+                  {d.getDate()}
+                </button>
+              </div>
             );
           })}
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Selected</p>
-        <p className="mt-1 text-lg font-bold">
-          {selected.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}
-        </p>
-        <div className="mt-3">
-          {selMarker ? (
-            <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${selLabels[selMarker].tone}`}>
-              {selLabels[selMarker].label}
-            </span>
-          ) : (
-            <span className="inline-block rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">
-              Regular cycle day
-            </span>
-          )}
-        </div>
+      {/* Filter pills */}
+      <section className="flex items-center gap-2 overflow-x-auto pb-1">
+        {filterPills.map((p) => {
+          const active = filter === p.key;
+          return (
+            <button
+              key={p.key}
+              onClick={() => setFilter(p.key)}
+              className={`shrink-0 rounded-full border bg-card px-4 py-1.5 text-xs font-semibold transition-all ${p.cls} ${active ? "shadow-soft scale-[1.03]" : "opacity-80"}`}
+            >
+              {p.label}
+            </button>
+          );
+        })}
       </section>
 
-      <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Legend</p>
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <LegendDot className="bg-gradient-period" label="Period" />
-          <LegendDot className="bg-[var(--ovulation)]" label="Ovulation" />
-          <LegendDot className="bg-[var(--fertile)] border border-border" label="Fertile" />
-          <LegendDot className="bg-[var(--pms)]/40" label="PMS" />
+      {/* About your cycle */}
+      <section className="rounded-[28px] bg-secondary/60 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-sm font-bold">About your cycle</h2>
+          <span className="h-1 w-10 rounded-full bg-muted" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl bg-card p-4 shadow-soft">
+            <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--fertile)]">
+              <Sparkles className="h-4 w-4" style={{ color: "var(--period)" }} />
+            </div>
+            <p className="text-[11px] text-muted-foreground">Average cycle length</p>
+            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--period)" }}>
+              {info.cycleLength} <span className="text-base font-semibold">days</span>
+            </p>
+          </div>
+          <div className="rounded-2xl bg-card p-4 shadow-soft">
+            <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--fertile)]">
+              <Droplet className="h-4 w-4" style={{ color: "var(--period)" }} />
+            </div>
+            <p className="text-[11px] text-muted-foreground">Average period length</p>
+            <p className="mt-1 text-2xl font-bold" style={{ color: "var(--period)" }}>
+              {info.periodLength} <span className="text-base font-semibold">days</span>
+            </p>
+          </div>
         </div>
       </section>
-    </div>
-  );
-}
-
-function LegendDot({ className, label }: { className: string; label: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`h-4 w-4 rounded-full ${className}`} />
-      <span className="font-medium text-foreground">{label}</span>
     </div>
   );
 }
