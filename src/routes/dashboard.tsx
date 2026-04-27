@@ -154,7 +154,7 @@ function DashboardContent() {
         className="relative overflow-hidden rounded-[28px] p-6 text-white shadow-glow"
         style={{
           background:
-            "linear-gradient(135deg, #ff7eb3 0%, #ff8a73 45%, #c79bf2 100%)",
+            "linear-gradient(135deg, #6667AB 0%, #7B337E 55%, #420D4B 100%)",
         }}
       >
         <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full bg-white/20 blur-2xl" />
