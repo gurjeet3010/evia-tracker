@@ -2,8 +2,20 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/lib/AuthProvider";
 import { addPeriod, deletePeriod, listPeriods, type PeriodEntry } from "@/lib/cycleApi";
+import {
+  loadSettings,
+  saveSettings,
+  requestPermission,
+  permissionState,
+  scheduleNext,
+  clearScheduled,
+  nextReminderAt,
+  notificationsSupported,
+  type ReminderSettings,
+} from "@/lib/notifications";
+import { profileToUserData } from "@/lib/cycle";
 import { useEffect, useState } from "react";
-import { LogOut, Save, Check, Plus, Trash2, Droplet } from "lucide-react";
+import { LogOut, Save, Check, Plus, Trash2, Droplet, Bell, BellOff } from "lucide-react";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
