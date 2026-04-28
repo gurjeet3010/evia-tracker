@@ -133,7 +133,7 @@ Evia aims to evolve into a **personalized AI-powered menstrual wellness assistan
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/evia-tracker.git
+git clone https://github.com/gurjeet-kaur3010/evia-tracker.git
 
 # Navigate into the project
 cd evia-tracker
