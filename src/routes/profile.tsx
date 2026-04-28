@@ -220,3 +220,109 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
     </div>
   );
 }
+
+function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typeof useAuth>["profile"]> }) {
+  const [settings, setSettings] = useState<ReminderSettings>(() => loadSettings());
+  const [perm, setPerm] = useState<NotificationPermission | "unsupported">(() => permissionState());
+  const supported = notificationsSupported();
+
+  const user = profileToUserData(profile);
+  const next = settings.enabled && perm === "granted" ? nextReminderAt(user, settings) : null;
+
+  function persist(patch: Partial<ReminderSettings>) {
+    const updated = { ...settings, ...patch };
+    setSettings(updated);
+    saveSettings(updated);
+    if (updated.enabled && perm === "granted") {
+      scheduleNext(user, updated);
+    } else {
+      clearScheduled();
+    }
+  }
+
+  async function handleToggle() {
+    if (settings.enabled) {
+      persist({ enabled: false });
+      return;
+    }
+    const result = await requestPermission();
+    setPerm(result);
+    if (result === "granted") {
+      persist({ enabled: true });
+    }
+  }
+
+  return (
+    <section className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-bold">Period reminders</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Get a heads-up before your next period starts.
+          </p>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={!supported}
+          aria-label="Toggle reminders"
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl transition-colors ${
+            settings.enabled && perm === "granted"
+              ? "bg-gradient-pink text-primary-foreground shadow-soft"
+              : "bg-muted text-muted-foreground"
+          } disabled:opacity-50`}
+        >
+          {settings.enabled && perm === "granted" ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
+        </button>
+      </div>
+
+      {!supported && (
+        <p className="rounded-xl bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+          Notifications aren't supported in this browser.
+        </p>
+      )}
+      {supported && perm === "denied" && (
+        <p className="rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          Notifications are blocked. Enable them in your browser settings to receive reminders.
+        </p>
+      )}
+
+      <Field label={`Remind me ${settings.daysBefore} day${settings.daysBefore === 1 ? "" : "s"} before`}>
+        <div className="flex gap-2">
+          {[1, 2, 3].map((d) => (
+            <button
+              key={d}
+              onClick={() => persist({ daysBefore: d })}
+              className={`flex-1 rounded-xl py-2 text-sm font-semibold transition-colors ${
+                settings.daysBefore === d
+                  ? "bg-gradient-pink text-primary-foreground shadow-soft"
+                  : "bg-secondary/60 text-foreground hover:bg-secondary"
+              }`}
+            >
+              {d} day{d === 1 ? "" : "s"}
+            </button>
+          ))}
+        </div>
+      </Field>
+
+      <Field label={`At ${String(settings.hour).padStart(2, "0")}:00`} hint="Local time">
+        <input
+          type="range"
+          min={0}
+          max={23}
+          value={settings.hour}
+          onChange={(e) => persist({ hour: Number(e.target.value) })}
+          className="w-full accent-[var(--primary)]"
+        />
+      </Field>
+
+      {next && (
+        <div className="rounded-2xl bg-secondary/50 px-4 py-3 text-xs">
+          <p className="font-semibold text-foreground">Next reminder</p>
+          <p className="text-muted-foreground">
+            {next.toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
