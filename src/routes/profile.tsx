@@ -15,7 +15,7 @@ import {
 } from "@/lib/notifications";
 import { profileToUserData } from "@/lib/cycle";
 import { useEffect, useState } from "react";
-import { LogOut, Save, Check, Plus, Trash2, Droplet, Bell, BellOff } from "lucide-react";
+import { LogOut, Save, Check, Plus, Trash2, Droplet, Bell, BellOff, BellRing, Sparkles, ShieldAlert, ChevronDown, Send } from "lucide-react";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
