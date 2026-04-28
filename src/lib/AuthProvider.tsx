@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { bootstrapReminders, clearScheduled } from "./notifications";
 
 export type Profile = {
   id: string;
@@ -83,6 +84,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sub.subscription.unsubscribe();
     };
   }, [fetchProfile]);
+
+  // Bootstrap period reminders whenever the loaded profile changes
+  useEffect(() => {
+    bootstrapReminders(profile);
+    return () => clearScheduled();
+  }, [profile]);
 
   const refreshProfile = useCallback(async () => {
     if (!user) return;
