@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppShell } from "@/components/AppShell";
 import { useAuth } from "@/lib/AuthProvider";
 import { computeCycle, formatDate, addDays, startOfDay, isSameDay, getDayMarker, profileToUserData } from "@/lib/cycle";
@@ -171,12 +171,13 @@ function DashboardContent() {
               day {heroDay}
             </h2>
           </div>
-          <button
-            aria-label="Notifications"
+          <Link
+            to="/profile"
+            aria-label="Reminder Settings"
             className="flex h-10 w-10 items-center justify-center rounded-full bg-white/25 backdrop-blur-sm transition-colors hover:bg-white/35"
           >
             <Bell className="h-4 w-4" />
-          </button>
+          </Link>
         </div>
 
         <div className="relative mt-6 inline-block rounded-2xl bg-white/20 px-3 py-2 backdrop-blur-sm">
