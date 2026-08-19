@@ -9,7 +9,7 @@ import {
 } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { bootstrapReminders, clearScheduled } from "./notifications";
+import { bootstrapReminders, clearScheduled, initServiceWorker } from "./notifications";
 
 export type Profile = {
   id: string;
@@ -40,6 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Initialize service worker early for PWA support
+  useEffect(() => {
+    void initServiceWorker();
+  }, []);
 
   const fetchProfile = useCallback(async (uid: string) => {
     const { data, error } = await supabase
@@ -87,8 +92,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Bootstrap period reminders whenever the loaded profile changes
   useEffect(() => {
-    bootstrapReminders(profile);
-    return () => clearScheduled();
+    if (profile) {
+      bootstrapReminders(profile);
+    }
   }, [profile]);
 
   const refreshProfile = useCallback(async () => {
@@ -132,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    clearScheduled();
     await supabase.auth.signOut();
     setProfile(null);
   }, []);

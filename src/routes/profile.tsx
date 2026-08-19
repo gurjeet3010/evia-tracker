@@ -11,11 +11,14 @@ import {
   clearScheduled,
   nextReminderAt,
   notificationsSupported,
+  displayNotification,
+  isStandalone,
+  isIOS,
   type ReminderSettings,
 } from "@/lib/notifications";
 import { profileToUserData } from "@/lib/cycle";
 import { useEffect, useState } from "react";
-import { LogOut, Save, Check, Plus, Trash2, Droplet, Bell, BellOff, BellRing, Sparkles, ShieldAlert, ChevronDown, Send } from "lucide-react";
+import { LogOut, Save, Check, Plus, Trash2, Droplet, Bell, BellOff, BellRing, Sparkles, ShieldAlert, ChevronDown, Send, Smartphone } from "lucide-react";
 
 export const Route = createFileRoute("/profile")({
   head: () => ({
@@ -155,48 +158,79 @@ function ProfileContent() {
 
       {/* Period history */}
       <section className="space-y-4 rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
-        <div>
-          <h2 className="text-base font-bold">Period history</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">Log past periods to improve your predictions over time.</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold">Period history</h2>
+            <p className="text-xs text-muted-foreground">Log past cycles to keep predictions accurate</p>
+          </div>
+          <Droplet className="h-5 w-5 text-primary" />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Start</label>
-            <input type="date" value={newStart} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setNewStart(e.target.value)} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
+        <form onSubmit={handleAddPeriod} className="space-y-3 rounded-2xl bg-muted/40 p-3">
+          <p className="text-xs font-semibold text-foreground">Log a period</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[11px] text-muted-foreground">Start date</label>
+              <input
+                type="date"
+                value={newStartDate}
+                onChange={(e) => setNewStartDate(e.target.value)}
+                required
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] text-muted-foreground">End date (optional)</label>
+              <input
+                type="date"
+                value={newEndDate}
+                onChange={(e) => setNewEndDate(e.target.value)}
+                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">End (optional)</label>
-            <input type="date" value={newEnd} max={new Date().toISOString().slice(0, 10)} onChange={(e) => setNewEnd(e.target.value)} className="mt-1 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary" />
-          </div>
-        </div>
-        <button onClick={handleAddPeriod} className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/10">
-          <Plus className="h-4 w-4" /> Log period
-        </button>
+          <button
+            type="submit"
+            disabled={addingPeriod || !newStartDate}
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-pink py-2.5 text-xs font-semibold text-primary-foreground shadow-soft hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+          >
+            <Plus className="h-3.5 w-3.5" /> Log period
+          </button>
+        </form>
 
-        <ul className="space-y-2">
-          {history.length === 0 && (
-            <li className="rounded-2xl bg-muted/50 px-4 py-3 text-center text-xs text-muted-foreground">No past periods logged yet.</li>
-          )}
-          {history.map((h) => (
-            <li key={h.id} className="flex items-center gap-3 rounded-2xl bg-secondary/40 px-3 py-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-period text-white">
-                <Droplet className="h-4 w-4" />
+        {loadingPeriods ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">Loading history…</p>
+        ) : periods.length === 0 ? (
+          <p className="py-4 text-center text-xs text-muted-foreground">No periods logged yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {periods.map((p) => (
+              <div
+                key={p.id}
+                className="flex items-center justify-between rounded-2xl border border-border/40 bg-background px-4 py-3 text-xs"
+              >
+                <div>
+                  <p className="font-semibold text-foreground">
+                    {new Date(p.start_date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    {p.end_date && ` → ${new Date(p.end_date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {p.end_date
+                      ? `${Math.max(1, Math.round((new Date(p.end_date).getTime() - new Date(p.start_date).getTime()) / (24 * 60 * 60 * 1000)) + 1)} days`
+                      : "Start only"}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleDeletePeriod(p.id)}
+                  className="text-muted-foreground transition-colors hover:text-destructive"
+                  aria-label="Delete entry"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-              <div className="flex-1 text-sm">
-                <p className="font-semibold text-foreground">
-                  {new Date(h.start_date).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {h.end_date ? `Ended ${new Date(h.end_date).toLocaleDateString(undefined, { day: "2-digit", month: "short" })}` : "Ongoing"}
-                </p>
-              </div>
-              <button onClick={() => handleDelete(h.id)} aria-label="Delete" className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive">
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
+            ))}
+          </div>
+        )}
       </section>
 
       <button
@@ -275,9 +309,9 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
   const [testSent, setTestSent] = useState(false);
   const supported = notificationsSupported();
   const browser = detectBrowser();
+  const standalone = isStandalone();
+  const ios = isIOS();
 
-  // Refresh permission state when the tab regains focus (user may have toggled
-  // it in browser settings).
   useEffect(() => {
     function refresh() {
       setPerm(permissionState());
@@ -325,25 +359,56 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
     persist({ enabled: false });
   }
 
-  function handleTest() {
+  async function handleTest() {
     if (perm !== "granted") return;
     try {
-      new Notification("Evia reminder ✨", {
+      const sent = await displayNotification("Evia reminder ✨", {
         body: "Looks great — you'll get a heads-up before your next period.",
         icon: "/icon-192.png",
         tag: "evia-test",
       });
-      setTestSent(true);
-      setTimeout(() => setTestSent(false), 2000);
+      if (sent) {
+        setTestSent(true);
+        setTimeout(() => setTestSent(false), 2500);
+      }
     } catch (e) {
       console.error("Test notification failed:", e);
     }
   }
 
-  // ─── Render states ───────────────────────────────────────────────────────
+  if (ios && !standalone && perm === "unsupported") {
+    return (
+      <section className="space-y-3 rounded-3xl border border-primary/30 bg-primary/5 p-5 shadow-soft">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
+            <Smartphone className="h-5 w-5" />
+          </div>
+          <div className="flex-1">
+            <h2 className="text-base font-bold text-foreground">Enable reminders on iOS</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              To receive period reminders on your iPhone or iPad, add Evia to your Home Screen:
+            </p>
+          </div>
+        </div>
+        <ol className="space-y-2 rounded-2xl bg-card px-4 py-3 text-xs text-muted-foreground">
+          <li className="flex gap-2.5">
+            <span className="font-bold text-primary">1.</span>
+            <span>Tap the <strong>Share</strong> button (box with arrow) in Safari.</span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="font-bold text-primary">2.</span>
+            <span>Scroll down and select <strong>Add to Home Screen</strong>.</span>
+          </li>
+          <li className="flex gap-2.5">
+            <span className="font-bold text-primary">3.</span>
+            <span>Open Evia from your Home Screen to turn on reminders.</span>
+          </li>
+        </ol>
+      </section>
+    );
+  }
 
-  // 1) Browser doesn't support notifications at all
-  if (!supported) {
+  if (!supported || perm === "unsupported") {
     return (
       <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
         <div className="flex items-start gap-3">
@@ -353,7 +418,7 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
           <div className="flex-1">
             <h2 className="text-base font-bold">Period reminders</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Your browser doesn't support notifications. Try opening Evia in Chrome, Edge, Firefox, or Safari to enable reminders.
+              Your browser doesn't support notifications. Try installing Evia as a PWA in Chrome, Edge, or Safari to enable reminders.
             </p>
           </div>
         </div>

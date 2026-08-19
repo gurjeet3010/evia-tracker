@@ -1,12 +1,12 @@
-// Period reminder notifications.
+// Period reminder notifications for PWA and Web.
 //
 // Strategy (in order of preference):
 //   1. Service Worker + Notification Triggers (TimestampTrigger) — fires
 //      reliably even when the app is closed. Chromium-based browsers.
-//   2. Service Worker + setTimeout inside the SW — works while the SW is
-//      alive; we re-post the schedule on every app load.
-//   3. In-tab setTimeout via the page's Notification API — last-resort
-//      fallback (only fires while a tab is open).
+//   2. Service Worker + showNotification — works across Android Chrome PWA,
+//      iOS 16.4+ standalone PWA, and desktop browsers.
+//   3. In-tab fallback timer via displayNotification — active while tab is open.
+//   4. Due reminder catch-up on app boot (fireDueReminder).
 //
 // Settings persist in localStorage per-device.
 
@@ -15,6 +15,7 @@ import type { Profile } from "./AuthProvider";
 
 const SETTINGS_KEY = "evia.notifications.v1";
 const LAST_FIRED_PREFIX = "evia.notifications.lastFired."; // + reminderKey
+const MAX_TIMEOUT_MS = 2147483647; // 2^31 - 1 (~24.8 days)
 
 export type ReminderSettings = {
   enabled: boolean;
@@ -44,29 +45,116 @@ export function saveSettings(s: ReminderSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }
 
+export function isStandalone(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window.navigator as any).standalone === true ||
+    document.referrer.includes("android-app://")
+  );
+}
+
+export function isIOS(): boolean {
+  if (typeof window === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 export function notificationsSupported(): boolean {
-  return typeof window !== "undefined" && "Notification" in window;
+  if (typeof window === "undefined") return false;
+  return "Notification" in window || ("serviceWorker" in navigator && "PushManager" in window);
 }
 
 export function pushSupported(): boolean {
   return (
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
-    "Notification" in window
+    ("Notification" in window || "PushManager" in window)
   );
 }
 
 export function permissionState(): NotificationPermission | "unsupported" {
-  if (!notificationsSupported()) return "unsupported";
-  return Notification.permission;
+  if (typeof window === "undefined") return "unsupported";
+  if ("Notification" in window) {
+    return Notification.permission;
+  }
+  return "unsupported";
 }
 
 export async function requestPermission(): Promise<NotificationPermission | "unsupported"> {
-  if (!notificationsSupported()) return "unsupported";
+  if (typeof window === "undefined") return "unsupported";
+  if (!("Notification" in window)) {
+    return "unsupported";
+  }
   if (Notification.permission === "granted" || Notification.permission === "denied") {
     return Notification.permission;
   }
-  return await Notification.requestPermission();
+  try {
+    const perm = await Notification.requestPermission();
+    return perm;
+  } catch {
+    // Callback format fallback for older Safari WebKit
+    return new Promise<NotificationPermission | "unsupported">((resolve) => {
+      try {
+        Notification.requestPermission((result) => resolve(result));
+      } catch {
+        resolve("unsupported");
+      }
+    });
+  }
+}
+
+/**
+ * Universal notification dispatcher.
+ * Prioritizes ServiceWorkerRegistration.showNotification() which is required on
+ * Android Chrome and iOS Standalone PWA (where `new Notification()` throws an Illegal constructor error).
+ */
+export async function displayNotification(
+  title: string,
+  options?: NotificationOptions & { url?: string }
+): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  if (permissionState() !== "granted") return false;
+
+  const defaultOptions: NotificationOptions = {
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: "evia-period-reminder",
+    ...options,
+  };
+
+  // 1. Primary: Service Worker showNotification (Works reliably in PWA & Mobile)
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await getServiceWorkerRegistration();
+      const readyReg = await navigator.serviceWorker.ready;
+      const targetReg = readyReg || reg;
+      if (targetReg && typeof targetReg.showNotification === "function") {
+        await targetReg.showNotification(title, {
+          ...defaultOptions,
+          data: { url: options?.url || "/dashboard", ...(options?.data || {}) },
+        });
+        return true;
+      }
+    } catch (err) {
+      console.warn("[Evia Notification] SW showNotification failed, trying fallback:", err);
+    }
+  }
+
+  // 2. Fallback: window.Notification (Desktop browsers without active SW)
+  if ("Notification" in window) {
+    try {
+      new Notification(title, defaultOptions);
+      return true;
+    } catch (err) {
+      console.error("[Evia Notification] window.Notification failed:", err);
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -116,15 +204,6 @@ function reminderKey(fireAt: Date): string {
   return fireAt.toISOString().slice(0, 13);
 }
 
-function showInTab(title: string, body: string) {
-  if (!notificationsSupported() || Notification.permission !== "granted") return;
-  try {
-    new Notification(title, { body, icon: "/icon-192.png", tag: "evia-period-reminder" });
-  } catch (e) {
-    console.error("Failed to show notification:", e);
-  }
-}
-
 /** Fire a reminder NOW if one was due in the last 24h and not yet shown. */
 export function fireDueReminder(user: UserData, s: ReminderSettings, now: Date = new Date()) {
   if (!s.enabled || permissionState() !== "granted") return;
@@ -138,9 +217,12 @@ export function fireDueReminder(user: UserData, s: ReminderSettings, now: Date =
       const key = LAST_FIRED_PREFIX + reminderKey(fire);
       if (!localStorage.getItem(key)) {
         const days = Math.max(0, Math.round((periodDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
-        showInTab(
+        void displayNotification(
           "Period reminder 🌸",
-          days <= 0 ? "Your period is expected today." : `Your next period is expected in ${days} day${days === 1 ? "" : "s"}.`
+          {
+            body: days <= 0 ? "Your period is expected today." : `Your next period is expected in ${days} day${days === 1 ? "" : "s"}.`,
+            tag: `evia-period-${reminderKey(fire)}`,
+          }
         );
         localStorage.setItem(key, String(now.getTime()));
       }
@@ -174,25 +256,40 @@ export function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistratio
     return Promise.resolve(null);
   }
   if (!swRegPromise) {
-    swRegPromise = navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
-      .then(async (reg) => {
+    swRegPromise = (async () => {
+      try {
+        const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
         await navigator.serviceWorker.ready;
         return reg;
-      })
-      .catch((err) => {
-        console.warn("SW registration failed:", err);
+      } catch (err) {
+        console.warn("[Evia PWA] Service Worker registration failed:", err);
+        swRegPromise = null;
         return null;
-      });
+      }
+    })();
   }
   return swRegPromise;
 }
 
-async function postToSW(message: unknown) {
-  const reg = await getServiceWorkerRegistration();
-  const target = reg?.active || navigator.serviceWorker?.controller;
-  target?.postMessage(message);
-  return Boolean(target);
+export async function initServiceWorker(): Promise<ServiceWorkerRegistration | null> {
+  return await getServiceWorkerRegistration();
+}
+
+async function postToSW(message: unknown): Promise<boolean> {
+  try {
+    const reg = await getServiceWorkerRegistration();
+    if (!reg) return false;
+    const readyReg = await navigator.serviceWorker.ready;
+    const target = readyReg?.active || reg?.active || navigator.serviceWorker?.controller;
+    if (target) {
+      target.postMessage(message);
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.warn("[Evia PWA] postToSW error:", err);
+    return false;
+  }
 }
 
 // ---------- In-tab fallback timer ----------
@@ -212,21 +309,36 @@ function scheduleInTabFallback(user: UserData, s: ReminderSettings) {
   if (scheduledTimer) clearTimeout(scheduledTimer);
   const next = nextReminderAt(user, s);
   if (!next) return;
-  const delay = Math.min(next.getTime() - Date.now(), 24 * 60 * 60 * 1000);
-  if (delay <= 0) return;
-  scheduledTimer = setTimeout(() => {
-    const info = computeCycle(user);
-    const days = Math.max(
-      0,
-      Math.round((info.nextPeriodStart.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-    );
-    showInTab(
-      "Period reminder 🌸",
-      days <= 0 ? "Your period is expected today." : `Your next period is expected in ${days} day${days === 1 ? "" : "s"}.`
-    );
-    localStorage.setItem(LAST_FIRED_PREFIX + reminderKey(next), String(Date.now()));
-    scheduleInTabFallback(user, s);
-  }, delay);
+  const now = Date.now();
+  const diff = next.getTime() - now;
+  if (diff <= 0) return;
+
+  // Handle setTimeout integer limits without triggering premature reminder
+  if (diff <= MAX_TIMEOUT_MS) {
+    scheduledTimer = setTimeout(() => {
+      if (Date.now() >= next.getTime() - 60000) {
+        const info = computeCycle(user);
+        const days = Math.max(
+          0,
+          Math.round((info.nextPeriodStart.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
+        );
+        void displayNotification(
+          "Period reminder 🌸",
+          {
+            body: days <= 0 ? "Your period is expected today." : `Your next period is expected in ${days} day${days === 1 ? "" : "s"}.`,
+            tag: `evia-period-${reminderKey(next)}`,
+          }
+        );
+        localStorage.setItem(LAST_FIRED_PREFIX + reminderKey(next), String(Date.now()));
+      }
+      scheduleInTabFallback(user, s);
+    }, diff);
+  } else {
+    // If over 24.8 days, wake up at max interval and reschedule
+    scheduledTimer = setTimeout(() => {
+      scheduleInTabFallback(user, s);
+    }, MAX_TIMEOUT_MS);
+  }
 }
 
 /**
@@ -246,9 +358,9 @@ export async function scheduleNext(user: UserData, s: ReminderSettings) {
   if (!sentToSW) {
     // Fallback only if no SW is available (e.g. preview iframe, unsupported browser).
     scheduleInTabFallback(user, s);
-  } else if (scheduledTimer) {
-    clearTimeout(scheduledTimer);
-    scheduledTimer = null;
+  } else {
+    // Keep in-tab timer running alongside SW while app is active
+    scheduleInTabFallback(user, s);
   }
 }
 
