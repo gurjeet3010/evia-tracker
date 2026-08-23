@@ -28,6 +28,9 @@ async function showReminder(title, body, tag, data) {
     tag: tag || "evia-period-reminder",
     icon: "/icon-192.png",
     badge: "/icon-192.png",
+    vibrate: [100, 50, 100],
+    renotify: true,
+    requireInteraction: false,
     data: data || { url: "/dashboard" },
   });
 }
@@ -58,6 +61,8 @@ async function scheduleReminders(reminders) {
           tag: r.tag || "evia-period-reminder",
           icon: "/icon-192.png",
           badge: "/icon-192.png",
+          vibrate: [100, 50, 100],
+          renotify: true,
           showTrigger: trigger,
           data: { url: "/dashboard" },
         });
@@ -89,6 +94,15 @@ self.addEventListener("message", (event) => {
     event.waitUntil(scheduleReminders(msg.reminders || []));
   } else if (msg.type === "CLEAR_REMINDERS") {
     event.waitUntil(scheduleReminders([]));
+  } else if (msg.type === "TEST_NOTIFICATION") {
+    event.waitUntil(
+      showReminder(
+        msg.title || "Evia reminder ✨",
+        msg.body || "Notifications are set up and working on your mobile device!",
+        msg.tag || "evia-test-reminder",
+        { url: msg.url || "/dashboard" }
+      )
+    );
   }
 });
 

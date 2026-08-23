@@ -107,6 +107,19 @@ export async function requestPermission(): Promise<NotificationPermission | "uns
   }
 }
 
+/** Helper to race a promise against a timeout */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
+/**
+ * Universal notification dispatcher.
+ * Prioritizes ServiceWorkerRegistration.showNotification() which is required on
+ * Android Chrome and iOS Standalone PWA (where `new Notification()` throws an Illegal constructor error).
+ */
 /**
  * Universal notification dispatcher.
  * Prioritizes ServiceWorkerRegistration.showNotification() which is required on
@@ -119,6 +132,13 @@ export async function displayNotification(
   if (typeof window === "undefined") return false;
   if (permissionState() !== "granted") return false;
 
+  // Haptic feedback on mobile devices if supported
+  if ("vibrate" in navigator && typeof navigator.vibrate === "function") {
+    try {
+      navigator.vibrate([100, 50, 100]);
+    } catch {}
+  }
+
   const defaultOptions: NotificationOptions = {
     icon: "/icon-192.png",
     badge: "/icon-192.png",
@@ -129,12 +149,15 @@ export async function displayNotification(
   // 1. Primary: Service Worker showNotification (Works reliably in PWA & Mobile)
   if ("serviceWorker" in navigator) {
     try {
-      const reg = await getServiceWorkerRegistration();
-      const readyReg = await navigator.serviceWorker.ready;
-      const targetReg = readyReg || reg;
-      if (targetReg && typeof targetReg.showNotification === "function") {
-        await targetReg.showNotification(title, {
+      const reg =
+        (await withTimeout(navigator.serviceWorker.getRegistration(), 1000, null)) ||
+        (await withTimeout(getServiceWorkerRegistration(), 2000, null));
+
+      if (reg && typeof reg.showNotification === "function") {
+        await reg.showNotification(title, {
           ...defaultOptions,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          vibrate: (defaultOptions as any).vibrate || [100, 50, 100],
           data: { url: options?.url || "/dashboard", ...(options?.data || {}) },
         });
         return true;
@@ -145,16 +168,32 @@ export async function displayNotification(
   }
 
   // 2. Fallback: window.Notification (Desktop browsers without active SW)
-  if ("Notification" in window) {
+  if ("Notification" in window && typeof Notification === "function") {
     try {
       new Notification(title, defaultOptions);
       return true;
     } catch (err) {
-      console.error("[Evia Notification] window.Notification failed:", err);
+      console.warn("[Evia Notification] window.Notification failed:", err);
     }
   }
 
   return false;
+}
+
+/** Directly trigger a test notification using SW message or displayNotification */
+export async function sendTestNotification(): Promise<boolean> {
+  const sentSW = await postToSW({
+    type: "TEST_NOTIFICATION",
+    title: "Evia reminder ✨",
+    body: "Notifications are set up and working on your mobile device!",
+    url: "/dashboard",
+  });
+  if (sentSW) return true;
+
+  return displayNotification("Evia reminder ✨", {
+    body: "Notifications are set up and working on your mobile device!",
+    url: "/dashboard",
+  });
 }
 
 /**
@@ -237,12 +276,12 @@ let swRegPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 function isPreviewOrIframe(): boolean {
   if (typeof window === "undefined") return true;
   try {
+    // Disable in embedded iframe (e.g. editor webview preview panel)
     if (window.self !== window.top) return true;
   } catch {
-    return true;
+    return false;
   }
-  const h = window.location.hostname;
-  return h.includes("id-preview--") || h.includes("lovableproject.com");
+  return false;
 }
 
 export function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
@@ -259,7 +298,7 @@ export function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistratio
     swRegPromise = (async () => {
       try {
         const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-        await navigator.serviceWorker.ready;
+        await withTimeout(navigator.serviceWorker.ready, 2000, null);
         return reg;
       } catch (err) {
         console.warn("[Evia PWA] Service Worker registration failed:", err);
@@ -277,10 +316,11 @@ export async function initServiceWorker(): Promise<ServiceWorkerRegistration | n
 
 async function postToSW(message: unknown): Promise<boolean> {
   try {
-    const reg = await getServiceWorkerRegistration();
+    const reg =
+      (await withTimeout(navigator.serviceWorker.getRegistration(), 1000, null)) ||
+      (await withTimeout(getServiceWorkerRegistration(), 2000, null));
     if (!reg) return false;
-    const readyReg = await navigator.serviceWorker.ready;
-    const target = readyReg?.active || reg?.active || navigator.serviceWorker?.controller;
+    const target = reg.active || reg.waiting || reg.installing || navigator.serviceWorker.controller;
     if (target) {
       target.postMessage(message);
       return true;
@@ -364,12 +404,33 @@ export async function scheduleNext(user: UserData, s: ReminderSettings) {
   }
 }
 
+let foregroundListenerAttached = false;
+
+/** Listen for app visibility / focus events to check and dispatch due reminders on mobile unlock/resume */
+export function setupMobileForegroundListener(userGetter: () => UserData | null) {
+  if (typeof window === "undefined" || foregroundListenerAttached) return;
+  foregroundListenerAttached = true;
+  const handleCheck = () => {
+    if (document.visibilityState === "visible") {
+      const u = userGetter();
+      const s = loadSettings();
+      if (u && s.enabled) {
+        fireDueReminder(u, s);
+        void scheduleNext(u, s);
+      }
+    }
+  };
+  document.addEventListener("visibilitychange", handleCheck);
+  window.addEventListener("focus", handleCheck);
+}
+
 /** Convenience: bootstrap reminders from a Profile row. */
 export function bootstrapReminders(profile: Profile | null) {
   if (!profile) return;
   const s = loadSettings();
-  if (!s.enabled) return;
   const user = profileToUserData(profile);
+  setupMobileForegroundListener(() => user);
+  if (!s.enabled) return;
   fireDueReminder(user, s);
   void scheduleNext(user, s);
 }

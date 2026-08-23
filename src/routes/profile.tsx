@@ -12,6 +12,7 @@ import {
   nextReminderAt,
   notificationsSupported,
   displayNotification,
+  sendTestNotification,
   isStandalone,
   isIOS,
   type ReminderSettings,
@@ -306,7 +307,9 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
   const [perm, setPerm] = useState<NotificationPermission | "unsupported">(() => permissionState());
   const [requesting, setRequesting] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [testSent, setTestSent] = useState(false);
+  const [testNote, setTestNote] = useState<string | null>(null);
   const supported = notificationsSupported();
   const browser = detectBrowser();
   const standalone = isStandalone();
@@ -359,20 +362,54 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
     persist({ enabled: false });
   }
 
-  async function handleTest() {
-    if (perm !== "granted") return;
-    try {
-      const sent = await displayNotification("Evia reminder ✨", {
-        body: "Looks great — you'll get a heads-up before your next period.",
-        icon: "/icon-192.png",
-        tag: "evia-test",
+  const [showDiag, setShowDiag] = useState(false);
+  const [diagInfo, setDiagInfo] = useState<{
+    secure: boolean;
+    swSupported: boolean;
+    swRegistered: boolean;
+    perm: string;
+    standalone: boolean;
+  }>({
+    secure: typeof window !== "undefined" ? window.isSecureContext : false,
+    swSupported: typeof navigator !== "undefined" && "serviceWorker" in navigator,
+    swRegistered: false,
+    perm: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+    standalone: isStandalone(),
+  });
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistration().then((reg) => {
+        setDiagInfo((prev) => ({ ...prev, swRegistered: !!reg }));
       });
+    }
+  }, []);
+
+  async function handleTest() {
+    if (perm !== "granted") {
+      setTestNote(`Notification permission is "${perm}". Please enable notifications first.`);
+      return;
+    }
+    setTesting(true);
+    setTestNote(null);
+    try {
+      if (typeof window !== "undefined" && !window.isSecureContext) {
+        setTestNote("⚠️ Error: Not a secure context (HTTPS). Mobile browsers block notifications on plain HTTP/IP.");
+        return;
+      }
+      const sent = await sendTestNotification();
       if (sent) {
         setTestSent(true);
-        setTimeout(() => setTestSent(false), 2500);
+        setTimeout(() => setTestSent(false), 3000);
+      } else {
+        setTestNote("Notification dispatched to Service Worker. If no banner appeared, please check phone Settings → Apps → Chrome/Evia → Notifications.");
       }
-    } catch (e) {
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
       console.error("Test notification failed:", e);
+      setTestNote(`Error: ${err}`);
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -579,12 +616,76 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
         </div>
       )}
 
-      <button
-        onClick={handleTest}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-      >
-        {testSent ? <><Check className="h-3.5 w-3.5" /> Sent — check your notifications</> : <><Send className="h-3.5 w-3.5" /> Send a test notification</>}
-      </button>
+      <div className="space-y-2">
+        <button
+          onClick={handleTest}
+          disabled={testing}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-background py-2.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+        >
+          {testing ? (
+            "Sending test notification…"
+          ) : testSent ? (
+            <><Check className="h-3.5 w-3.5 text-emerald-500" /> Sent — check your notification shade</>
+          ) : (
+            <><Send className="h-3.5 w-3.5" /> Send a test notification</>
+          )}
+        </button>
+        {testNote && (
+          <p className="rounded-xl bg-amber-500/10 p-2.5 text-center text-xs font-medium text-amber-700 dark:text-amber-300">
+            {testNote}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
+              navigator.serviceWorker.getRegistration().then((reg) => {
+                setDiagInfo({
+                  secure: window.isSecureContext,
+                  swSupported: "serviceWorker" in navigator,
+                  swRegistered: !!reg,
+                  perm: typeof Notification !== "undefined" ? Notification.permission : "unsupported",
+                  standalone: isStandalone(),
+                });
+              });
+            }
+            setShowDiag((v) => !v);
+          }}
+          className="mt-2 text-center text-[11px] text-muted-foreground underline hover:text-foreground block w-full"
+        >
+          {showDiag ? "Hide device diagnostics" : "Check device notification status"}
+        </button>
+
+        {showDiag && (
+          <div className="rounded-2xl border border-border/80 bg-muted/40 p-3 text-[11px] font-mono space-y-1 text-muted-foreground">
+            <div className="flex justify-between">
+              <span>Secure Context (HTTPS):</span>
+              <span className={diagInfo.secure ? "text-emerald-500 font-bold" : "text-rose-500 font-bold"}>
+                {diagInfo.secure ? "YES" : "NO (Blocked by Browser)"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>Notification API:</span>
+              <span className="font-bold text-foreground">{diagInfo.perm}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Service Worker Supported:</span>
+              <span className="font-bold text-foreground">{diagInfo.swSupported ? "YES" : "NO"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Service Worker Registered:</span>
+              <span className={diagInfo.swRegistered ? "text-emerald-500 font-bold" : "text-amber-500 font-bold"}>
+                {diagInfo.swRegistered ? "YES" : "NOT YET"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span>App Mode:</span>
+              <span className="font-bold text-foreground">{diagInfo.standalone ? "Installed PWA" : "Browser Webpage"}</span>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
