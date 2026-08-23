@@ -13,6 +13,7 @@ import {
   notificationsSupported,
   displayNotification,
   sendTestNotification,
+  initServiceWorker,
   isStandalone,
   isIOS,
   type ReminderSettings,
@@ -82,6 +83,11 @@ function ProfileContent() {
       period_length: periodLength,
     });
     if (res.ok) {
+      if (user && lastPeriod) {
+        // Auto-log period start date into period history so user doesn't have to duplicate work
+        await addPeriod(user.id, lastPeriod, null);
+        await loadHistory();
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
       await refreshProfile();
@@ -93,6 +99,12 @@ function ProfileContent() {
     if (!user || !newStart) return;
     setAddingPeriod(true);
     await addPeriod(user.id, newStart, newEnd || null);
+    // Auto-update cycle settings if newly logged period is most recent
+    if (!profile?.last_period_start || newStart >= profile.last_period_start) {
+      await updateProfile({ last_period_start: newStart });
+      setLastPeriod(newStart);
+      await refreshProfile();
+    }
     setNewEnd("");
     await loadHistory();
     setAddingPeriod(false);
@@ -357,6 +369,8 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
       setPerm(result);
       if (result === "granted") {
         persist({ enabled: true });
+        await initServiceWorker();
+        void sendTestNotification();
       } else if (result === "denied") {
         setShowHelp(true);
       }
@@ -393,23 +407,31 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
   }, []);
 
   async function handleTest() {
-    if (perm !== "granted") {
-      setTestNote(`Notification permission is "${perm}". Please enable notifications first.`);
-      return;
-    }
     setTesting(true);
     setTestNote(null);
     try {
+      let currentPerm = permissionState();
+      if (currentPerm !== "granted") {
+        currentPerm = await requestPermission();
+        setPerm(currentPerm);
+      }
+      if (currentPerm !== "granted") {
+        setTestNote(`Notification permission is "${currentPerm}". Please allow notifications in browser settings.`);
+        return;
+      }
       if (typeof window !== "undefined" && !window.isSecureContext) {
         setTestNote("⚠️ Error: Not a secure context (HTTPS). Mobile browsers block notifications on plain HTTP/IP.");
         return;
       }
+      persist({ enabled: true });
+      await initServiceWorker();
+
       const sent = await sendTestNotification();
       if (sent) {
         setTestSent(true);
         setTimeout(() => setTestSent(false), 3000);
       } else {
-        setTestNote("Notification dispatched to Service Worker. If no banner appeared, please check phone Settings → Apps → Chrome/Evia → Notifications.");
+        setTestNote("Notification dispatched to Service Worker. If no banner appeared, check your phone Settings → Apps → Chrome/Evia → Notifications.");
       }
     } catch (e: unknown) {
       const err = e instanceof Error ? e.message : String(e);
