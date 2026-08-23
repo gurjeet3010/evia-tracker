@@ -51,6 +51,8 @@ function ProfileContent() {
   const [history, setHistory] = useState<PeriodEntry[]>([]);
   const [newStart, setNewStart] = useState(new Date().toISOString().slice(0, 10));
   const [newEnd, setNewEnd] = useState<string>("");
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [addingPeriod, setAddingPeriod] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -68,7 +70,9 @@ function ProfileContent() {
 
   async function loadHistory() {
     if (!user) return;
+    setLoadingHistory(true);
     setHistory(await listPeriods(user.id));
+    setLoadingHistory(false);
   }
 
   async function handleSave() {
@@ -84,11 +88,14 @@ function ProfileContent() {
     }
   }
 
-  async function handleAddPeriod() {
+  async function handleAddPeriod(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     if (!user || !newStart) return;
+    setAddingPeriod(true);
     await addPeriod(user.id, newStart, newEnd || null);
     setNewEnd("");
     await loadHistory();
+    setAddingPeriod(false);
   }
 
   async function handleDelete(id: string) {
@@ -174,8 +181,8 @@ function ProfileContent() {
               <label className="text-[11px] text-muted-foreground">Start date</label>
               <input
                 type="date"
-                value={newStartDate}
-                onChange={(e) => setNewStartDate(e.target.value)}
+                value={newStart}
+                onChange={(e) => setNewStart(e.target.value)}
                 required
                 className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
               />
@@ -184,28 +191,28 @@ function ProfileContent() {
               <label className="text-[11px] text-muted-foreground">End date (optional)</label>
               <input
                 type="date"
-                value={newEndDate}
-                onChange={(e) => setNewEndDate(e.target.value)}
+                value={newEnd}
+                onChange={(e) => setNewEnd(e.target.value)}
                 className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
               />
             </div>
           </div>
           <button
             type="submit"
-            disabled={addingPeriod || !newStartDate}
+            disabled={addingPeriod || !newStart}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-pink py-2.5 text-xs font-semibold text-primary-foreground shadow-soft hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           >
-            <Plus className="h-3.5 w-3.5" /> Log period
+            <Plus className="h-3.5 w-3.5" /> {addingPeriod ? "Saving…" : "Log period"}
           </button>
         </form>
 
-        {loadingPeriods ? (
+        {loadingHistory ? (
           <p className="py-4 text-center text-xs text-muted-foreground">Loading history…</p>
-        ) : periods.length === 0 ? (
+        ) : history.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">No periods logged yet.</p>
         ) : (
           <div className="space-y-2">
-            {periods.map((p) => (
+            {history.map((p) => (
               <div
                 key={p.id}
                 className="flex items-center justify-between rounded-2xl border border-border/40 bg-background px-4 py-3 text-xs"
@@ -222,7 +229,7 @@ function ProfileContent() {
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDeletePeriod(p.id)}
+                  onClick={() => handleDelete(p.id)}
                   className="text-muted-foreground transition-colors hover:text-destructive"
                   aria-label="Delete entry"
                 >

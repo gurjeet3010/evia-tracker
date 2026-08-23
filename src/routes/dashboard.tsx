@@ -32,13 +32,15 @@ function DashboardContent() {
 
   const user = useMemo(() => (profile ? profileToUserData(profile) : null), [profile]);
   const info = useMemo(() => (user ? computeCycle(user, today) : null), [user]);
+  const selectedInfo = useMemo(() => (user ? computeCycle(user, selected) : null), [user, selected]);
   if (!user || !info) return null;
 
+  const displayInfo = selectedInfo || info;
 
   // 7-day strip centered around today
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(today, i - 3));
 
-  const monthLabel = today.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  const monthLabel = selected.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
   const phaseTitle: Record<string, string> = {
     period: "Period",
@@ -49,15 +51,15 @@ function DashboardContent() {
     pms: "PMS",
   };
 
-  const heroDay = info.currentPhase === "period" ? info.currentDay : info.currentDay;
+  const heroDay = displayInfo.currentDay;
   const heroSubtitle =
-    info.currentPhase === "period"
-      ? `Next ovulation in ${info.daysUntilOvulation > 0 ? info.daysUntilOvulation : info.cycleLength + info.daysUntilOvulation} days`
-      : info.currentPhase === "ovulation"
-      ? `Ovulation today · Next period in ${info.daysUntilNextPeriod}d`
-      : info.currentPhase === "fertile"
-      ? `Ovulation in ${Math.max(info.daysUntilOvulation, 0)} days`
-      : `Next period in ${info.daysUntilNextPeriod} days`;
+    displayInfo.currentPhase === "period"
+      ? `Next ovulation in ${displayInfo.daysUntilOvulation > 0 ? displayInfo.daysUntilOvulation : displayInfo.cycleLength + displayInfo.daysUntilOvulation} days`
+      : displayInfo.currentPhase === "ovulation"
+      ? `Ovulation today · Next period in ${displayInfo.daysUntilNextPeriod}d`
+      : displayInfo.currentPhase === "fertile"
+      ? `Ovulation in ${Math.max(displayInfo.daysUntilOvulation, 0)} days`
+      : `Next period in ${displayInfo.daysUntilNextPeriod} days`;
 
   // Build timeline upcoming events
   const timeline = [
@@ -165,7 +167,7 @@ function DashboardContent() {
         <div className="relative flex items-start justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-wider opacity-90">
-              {phaseTitle[info.currentPhase]}
+              {phaseTitle[displayInfo.currentPhase]}
             </p>
             <h2 className="mt-1 text-5xl font-bold leading-none">
               day {heroDay}
@@ -225,12 +227,12 @@ function DashboardContent() {
       <section className="rounded-[28px] border border-border/60 bg-card p-5 shadow-soft">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Daily tip</p>
         <p className="mt-2 text-sm leading-relaxed text-foreground">
-          {info.currentPhase === "period" && "💧 Stay hydrated and consider gentle stretching to ease cramps."}
-          {info.currentPhase === "fertile" && "🌸 Your energy peaks now — a great time for social connection."}
-          {info.currentPhase === "ovulation" && "✨ Ovulation today. Notice subtle shifts in mood and energy."}
-          {info.currentPhase === "follicular" && "🌱 Energy is rising — perfect for new projects and workouts."}
-          {info.currentPhase === "luteal" && "🌙 Slow down a little — your body is preparing for rest."}
-          {info.currentPhase === "pms" && "🤍 Be patient with yourself today. Comfort foods and rest help."}
+          {displayInfo.currentPhase === "period" && "💧 Stay hydrated and consider gentle stretching to ease cramps."}
+          {displayInfo.currentPhase === "fertile" && "🌸 Your energy peaks now — a great time for social connection."}
+          {displayInfo.currentPhase === "ovulation" && "✨ Ovulation today. Notice subtle shifts in mood and energy."}
+          {displayInfo.currentPhase === "follicular" && "🌱 Energy is rising — perfect for new projects and workouts."}
+          {displayInfo.currentPhase === "luteal" && "🌙 Slow down a little — your body is preparing for rest."}
+          {displayInfo.currentPhase === "pms" && "🤍 Be patient with yourself today. Comfort foods and rest help."}
         </p>
       </section>
     </div>
