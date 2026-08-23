@@ -442,39 +442,7 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
     }
   }
 
-  if (ios && !standalone && perm === "unsupported") {
-    return (
-      <section className="space-y-3 rounded-3xl border border-primary/30 bg-primary/5 p-5 shadow-soft">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-            <Smartphone className="h-5 w-5" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-base font-bold text-foreground">Enable reminders on iOS</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              To receive period reminders on your iPhone or iPad, add Evia to your Home Screen:
-            </p>
-          </div>
-        </div>
-        <ol className="space-y-2 rounded-2xl bg-card px-4 py-3 text-xs text-muted-foreground">
-          <li className="flex gap-2.5">
-            <span className="font-bold text-primary">1.</span>
-            <span>Tap the <strong>Share</strong> button (box with arrow) in Safari.</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="font-bold text-primary">2.</span>
-            <span>Scroll down and select <strong>Add to Home Screen</strong>.</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="font-bold text-primary">3.</span>
-            <span>Open Evia from your Home Screen to turn on reminders.</span>
-          </li>
-        </ol>
-      </section>
-    );
-  }
-
-  if (!supported || perm === "unsupported") {
+  if (!supported) {
     return (
       <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
         <div className="flex items-start gap-3">
@@ -484,7 +452,7 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
           <div className="flex-1">
             <h2 className="text-base font-bold">Period reminders</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Your browser doesn't support notifications. Try installing Evia as a PWA in Chrome, Edge, or Safari to enable reminders.
+              Your browser doesn't support notifications. Open Evia in Chrome on your Android phone to enable notifications.
             </p>
           </div>
         </div>
