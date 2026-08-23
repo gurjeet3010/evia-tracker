@@ -2,7 +2,7 @@
 
 **Evia** is a modern, user-centric menstrual health tracking web app designed to help users understand their cycle, log symptoms, and gain meaningful insights through a clean and calming interface.
 
-🔗 **Live Demo:** https://evia-tracker.lovable.app
+🔗 **Repository:** https://github.com/gurjeet3010/evia-tracker
 
 ## 📱 Install as a PWA (Progressive Web App)
 
@@ -10,7 +10,7 @@ Evia can be installed on your device like a native app for quick access and a be
 
 ### 💻 On Desktop (Chrome / Edge)
 
-1. Open the app: https://evia-tracker.lovable.app
+1. Open the app URL in Chrome or Edge
 2. Look for the **Install icon (➕)** in the address bar
 3. Click **"Install Evia"**
 4. The app will be added to your desktop/home screen
@@ -88,10 +88,6 @@ It blends **intuitive design + data tracking** to create a supportive digital we
 ### Database
 
 * **PLpgSQL (PostgreSQL)** — Structured data handling
-
-### Platform
-
-* Built using **Lovable** (rapid UI development & deployment)
 
 ---
 
