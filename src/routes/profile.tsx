@@ -350,11 +350,12 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
   const active = settings.enabled && perm === "granted";
   const next = active ? nextReminderAt(user, settings) : null;
 
-  function persist(patch: Partial<ReminderSettings>) {
+  function persist(patch: Partial<ReminderSettings>, overridePerm?: NotificationPermission | "unsupported") {
+    const effectivePerm = overridePerm ?? perm;
     const updated = { ...settings, ...patch };
     setSettings(updated);
     saveSettings(updated);
-    if (updated.enabled && perm === "granted") {
+    if (updated.enabled && effectivePerm === "granted") {
       void scheduleNext(user, updated);
     } else {
       clearScheduled();
@@ -368,8 +369,8 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
       const result = await requestPermission();
       setPerm(result);
       if (result === "granted") {
-        persist({ enabled: true });
         await initServiceWorker();
+        persist({ enabled: true }, result);
         void sendTestNotification();
       } else if (result === "denied") {
         setShowHelp(true);
@@ -423,8 +424,8 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
         setTestNote("⚠️ Error: Not a secure context (HTTPS). Mobile browsers block notifications on plain HTTP/IP.");
         return;
       }
-      persist({ enabled: true });
       await initServiceWorker();
+      persist({ enabled: true }, currentPerm);
 
       const sent = await sendTestNotification();
       if (sent) {
