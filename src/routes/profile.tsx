@@ -13,6 +13,7 @@ import {
   notificationsSupported,
   displayNotification,
   sendTestNotification,
+  initServiceWorker,
   isStandalone,
   isIOS,
   type ReminderSettings,
@@ -51,6 +52,8 @@ function ProfileContent() {
   const [history, setHistory] = useState<PeriodEntry[]>([]);
   const [newStart, setNewStart] = useState(new Date().toISOString().slice(0, 10));
   const [newEnd, setNewEnd] = useState<string>("");
+  const [loadingHistory, setLoadingHistory] = useState(true);
+  const [addingPeriod, setAddingPeriod] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -68,7 +71,9 @@ function ProfileContent() {
 
   async function loadHistory() {
     if (!user) return;
+    setLoadingHistory(true);
     setHistory(await listPeriods(user.id));
+    setLoadingHistory(false);
   }
 
   async function handleSave() {
@@ -78,17 +83,31 @@ function ProfileContent() {
       period_length: periodLength,
     });
     if (res.ok) {
+      if (user && lastPeriod) {
+        // Auto-log period start date into period history so user doesn't have to duplicate work
+        await addPeriod(user.id, lastPeriod, null);
+        await loadHistory();
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 1800);
       await refreshProfile();
     }
   }
 
-  async function handleAddPeriod() {
+  async function handleAddPeriod(e?: React.FormEvent) {
+    if (e) e.preventDefault();
     if (!user || !newStart) return;
+    setAddingPeriod(true);
     await addPeriod(user.id, newStart, newEnd || null);
+    // Auto-update cycle settings if newly logged period is most recent
+    if (!profile?.last_period_start || newStart >= profile.last_period_start) {
+      await updateProfile({ last_period_start: newStart });
+      setLastPeriod(newStart);
+      await refreshProfile();
+    }
     setNewEnd("");
     await loadHistory();
+    setAddingPeriod(false);
   }
 
   async function handleDelete(id: string) {
@@ -174,8 +193,8 @@ function ProfileContent() {
               <label className="text-[11px] text-muted-foreground">Start date</label>
               <input
                 type="date"
-                value={newStartDate}
-                onChange={(e) => setNewStartDate(e.target.value)}
+                value={newStart}
+                onChange={(e) => setNewStart(e.target.value)}
                 required
                 className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
               />
@@ -184,28 +203,28 @@ function ProfileContent() {
               <label className="text-[11px] text-muted-foreground">End date (optional)</label>
               <input
                 type="date"
-                value={newEndDate}
-                onChange={(e) => setNewEndDate(e.target.value)}
+                value={newEnd}
+                onChange={(e) => setNewEnd(e.target.value)}
                 className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:border-primary focus:outline-none"
               />
             </div>
           </div>
           <button
             type="submit"
-            disabled={addingPeriod || !newStartDate}
+            disabled={addingPeriod || !newStart}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-pink py-2.5 text-xs font-semibold text-primary-foreground shadow-soft hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           >
-            <Plus className="h-3.5 w-3.5" /> Log period
+            <Plus className="h-3.5 w-3.5" /> {addingPeriod ? "Saving…" : "Log period"}
           </button>
         </form>
 
-        {loadingPeriods ? (
+        {loadingHistory ? (
           <p className="py-4 text-center text-xs text-muted-foreground">Loading history…</p>
-        ) : periods.length === 0 ? (
+        ) : history.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">No periods logged yet.</p>
         ) : (
           <div className="space-y-2">
-            {periods.map((p) => (
+            {history.map((p) => (
               <div
                 key={p.id}
                 className="flex items-center justify-between rounded-2xl border border-border/40 bg-background px-4 py-3 text-xs"
@@ -222,7 +241,7 @@ function ProfileContent() {
                   </p>
                 </div>
                 <button
-                  onClick={() => handleDeletePeriod(p.id)}
+                  onClick={() => handleDelete(p.id)}
                   className="text-muted-foreground transition-colors hover:text-destructive"
                   aria-label="Delete entry"
                 >
@@ -331,11 +350,12 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
   const active = settings.enabled && perm === "granted";
   const next = active ? nextReminderAt(user, settings) : null;
 
-  function persist(patch: Partial<ReminderSettings>) {
+  function persist(patch: Partial<ReminderSettings>, overridePerm?: NotificationPermission | "unsupported") {
+    const effectivePerm = overridePerm ?? perm;
     const updated = { ...settings, ...patch };
     setSettings(updated);
     saveSettings(updated);
-    if (updated.enabled && perm === "granted") {
+    if (updated.enabled && effectivePerm === "granted") {
       void scheduleNext(user, updated);
     } else {
       clearScheduled();
@@ -349,7 +369,9 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
       const result = await requestPermission();
       setPerm(result);
       if (result === "granted") {
-        persist({ enabled: true });
+        await initServiceWorker();
+        persist({ enabled: true }, result);
+        void sendTestNotification();
       } else if (result === "denied") {
         setShowHelp(true);
       }
@@ -386,23 +408,31 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
   }, []);
 
   async function handleTest() {
-    if (perm !== "granted") {
-      setTestNote(`Notification permission is "${perm}". Please enable notifications first.`);
-      return;
-    }
     setTesting(true);
     setTestNote(null);
     try {
+      let currentPerm = permissionState();
+      if (currentPerm !== "granted") {
+        currentPerm = await requestPermission();
+        setPerm(currentPerm);
+      }
+      if (currentPerm !== "granted") {
+        setTestNote(`Notification permission is "${currentPerm}". Please allow notifications in browser settings.`);
+        return;
+      }
       if (typeof window !== "undefined" && !window.isSecureContext) {
         setTestNote("⚠️ Error: Not a secure context (HTTPS). Mobile browsers block notifications on plain HTTP/IP.");
         return;
       }
+      await initServiceWorker();
+      persist({ enabled: true }, currentPerm);
+
       const sent = await sendTestNotification();
       if (sent) {
         setTestSent(true);
         setTimeout(() => setTestSent(false), 3000);
       } else {
-        setTestNote("Notification dispatched to Service Worker. If no banner appeared, please check phone Settings → Apps → Chrome/Evia → Notifications.");
+        setTestNote("Notification dispatched to Service Worker. If no banner appeared, check your phone Settings → Apps → Chrome/Evia → Notifications.");
       }
     } catch (e: unknown) {
       const err = e instanceof Error ? e.message : String(e);
@@ -413,39 +443,7 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
     }
   }
 
-  if (ios && !standalone && perm === "unsupported") {
-    return (
-      <section className="space-y-3 rounded-3xl border border-primary/30 bg-primary/5 p-5 shadow-soft">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-            <Smartphone className="h-5 w-5" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-base font-bold text-foreground">Enable reminders on iOS</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              To receive period reminders on your iPhone or iPad, add Evia to your Home Screen:
-            </p>
-          </div>
-        </div>
-        <ol className="space-y-2 rounded-2xl bg-card px-4 py-3 text-xs text-muted-foreground">
-          <li className="flex gap-2.5">
-            <span className="font-bold text-primary">1.</span>
-            <span>Tap the <strong>Share</strong> button (box with arrow) in Safari.</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="font-bold text-primary">2.</span>
-            <span>Scroll down and select <strong>Add to Home Screen</strong>.</span>
-          </li>
-          <li className="flex gap-2.5">
-            <span className="font-bold text-primary">3.</span>
-            <span>Open Evia from your Home Screen to turn on reminders.</span>
-          </li>
-        </ol>
-      </section>
-    );
-  }
-
-  if (!supported || perm === "unsupported") {
+  if (!supported) {
     return (
       <section className="rounded-3xl border border-border/60 bg-card p-5 shadow-soft">
         <div className="flex items-start gap-3">
@@ -455,7 +453,7 @@ function NotificationsSection({ profile }: { profile: NonNullable<ReturnType<typ
           <div className="flex-1">
             <h2 className="text-base font-bold">Period reminders</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Your browser doesn't support notifications. Try installing Evia as a PWA in Chrome, Edge, or Safari to enable reminders.
+              Your browser doesn't support notifications. Open Evia in Chrome on your Android phone to enable notifications.
             </p>
           </div>
         </div>

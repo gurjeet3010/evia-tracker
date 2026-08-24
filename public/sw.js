@@ -3,7 +3,7 @@
 // (TimestampTrigger) on Chromium-based browsers when available; falls
 // back to in-SW setTimeout and client sync.
 
-const CACHE_NAME = "evia-sw-v2";
+const CACHE_NAME = "evia-sw-v3";
 const MAX_TIMEOUT_MS = 2147483647; // 2^31 - 1 (~24.8 days)
 
 self.addEventListener("install", (event) => {
@@ -22,12 +22,21 @@ function clearAllTimers() {
   timers.clear();
 }
 
+function getIconUrl(path) {
+  try {
+    return new URL(path, self.location.origin).href;
+  } catch {
+    return path;
+  }
+}
+
 async function showReminder(title, body, tag, data) {
+  const icon = getIconUrl("/icon-192.png");
   return self.registration.showNotification(title, {
     body,
     tag: tag || "evia-period-reminder",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
+    icon,
+    badge: icon,
     vibrate: [100, 50, 100],
     renotify: true,
     requireInteraction: false,
@@ -54,13 +63,14 @@ async function scheduleReminders(reminders) {
     // Prefer Notification Triggers (fires reliably on supported Chromium even when offline / SW unloaded).
     if ("TimestampTrigger" in self) {
       try {
+        const icon = getIconUrl("/icon-192.png");
         // eslint-disable-next-line no-undef
         const trigger = new TimestampTrigger(r.at);
         await self.registration.showNotification(r.title, {
           body: r.body,
           tag: r.tag || "evia-period-reminder",
-          icon: "/icon-192.png",
-          badge: "/icon-192.png",
+          icon,
+          badge: icon,
           vibrate: [100, 50, 100],
           renotify: true,
           showTrigger: trigger,
@@ -101,7 +111,18 @@ self.addEventListener("message", (event) => {
         msg.body || "Notifications are set up and working on your mobile device!",
         msg.tag || "evia-test-reminder",
         { url: msg.url || "/dashboard" }
-      )
+      ).catch((err) => console.warn("[Evia SW] TEST_NOTIFICATION showReminder error:", err))
+    );
+  }
+});
+
+// Periodic Sync fallback for Android Chrome PWAs
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "evia-check-reminders") {
+    event.waitUntil(
+      self.clients.matchAll({ type: "window" }).then((clients) => {
+        clients.forEach((client) => client.postMessage({ type: "CHECK_DUE_REMINDERS" }));
+      })
     );
   }
 });
@@ -123,3 +144,4 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+

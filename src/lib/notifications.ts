@@ -149,9 +149,15 @@ export async function displayNotification(
   // 1. Primary: Service Worker showNotification (Works reliably in PWA & Mobile)
   if ("serviceWorker" in navigator) {
     try {
-      const reg =
-        (await withTimeout(navigator.serviceWorker.getRegistration(), 1000, null)) ||
-        (await withTimeout(getServiceWorkerRegistration(), 2000, null));
+      let reg: ServiceWorkerRegistration | null = null;
+      if ("ready" in navigator.serviceWorker) {
+        reg = await withTimeout(navigator.serviceWorker.ready, 2000, null);
+      }
+      if (!reg) {
+        reg =
+          (await withTimeout(navigator.serviceWorker.getRegistration(), 1000, null)) ||
+          (await withTimeout(getServiceWorkerRegistration(), 2000, null));
+      }
 
       if (reg && typeof reg.showNotification === "function") {
         await reg.showNotification(title, {
@@ -180,15 +186,9 @@ export async function displayNotification(
   return false;
 }
 
-/** Directly trigger a test notification using SW message or displayNotification */
+/** Directly trigger a test notification using displayNotification with SW readiness */
 export async function sendTestNotification(): Promise<boolean> {
-  const sentSW = await postToSW({
-    type: "TEST_NOTIFICATION",
-    title: "Evia reminder ✨",
-    body: "Notifications are set up and working on your mobile device!",
-    url: "/dashboard",
-  });
-  if (sentSW) return true;
+  await initServiceWorker();
 
   return displayNotification("Evia reminder ✨", {
     body: "Notifications are set up and working on your mobile device!",
@@ -243,7 +243,7 @@ function reminderKey(fireAt: Date): string {
   return fireAt.toISOString().slice(0, 13);
 }
 
-/** Fire a reminder NOW if one was due in the last 24h and not yet shown. */
+/** Fire a reminder NOW if one was due and not yet shown for the active cycle. */
 export function fireDueReminder(user: UserData, s: ReminderSettings, now: Date = new Date()) {
   if (!s.enabled || permissionState() !== "granted") return;
   const info = computeCycle(user, now);
@@ -251,8 +251,8 @@ export function fireDueReminder(user: UserData, s: ReminderSettings, now: Date =
   for (const periodDate of [info.nextPeriodStart, addDays(info.nextPeriodStart, -info.cycleLength)]) {
     const fire = addDays(periodDate, -s.daysBefore);
     fire.setHours(s.hour, 0, 0, 0);
-    const diff = now.getTime() - fire.getTime();
-    if (diff >= 0 && diff <= 24 * 60 * 60 * 1000) {
+    const periodEndWindow = addDays(periodDate, 1).getTime();
+    if (now.getTime() >= fire.getTime() && now.getTime() <= periodEndWindow) {
       const key = LAST_FIRED_PREFIX + reminderKey(fire);
       if (!localStorage.getItem(key)) {
         const days = Math.max(0, Math.round((periodDate.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)));
@@ -276,8 +276,13 @@ let swRegPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 function isPreviewOrIframe(): boolean {
   if (typeof window === "undefined") return true;
   try {
-    // Disable in embedded iframe (e.g. editor webview preview panel)
-    if (window.self !== window.top) return true;
+    if (window.self !== window.top) {
+      const isDevHost =
+        window.location.hostname.includes("preview") ||
+        window.location.hostname.includes("stackblitz") ||
+        window.location.hostname.includes("codesandbox");
+      return isDevHost;
+    }
   } catch {
     return false;
   }
@@ -289,8 +294,6 @@ export function getServiceWorkerRegistration(): Promise<ServiceWorkerRegistratio
     return Promise.resolve(null);
   }
   if (isPreviewOrIframe()) {
-    // Don't register SW in the editor preview (caches stale content & blocks routing).
-    // Also clean up any previously-registered SW so dev stays sane.
     navigator.serviceWorker.getRegistrations().then((regs) => regs.forEach((r) => r.unregister()));
     return Promise.resolve(null);
   }
@@ -393,15 +396,23 @@ export async function scheduleNext(user: UserData, s: ReminderSettings) {
   }
 
   const reminders = buildReminderQueue(user, s);
-  const sentToSW = await postToSW({ type: "SCHEDULE_REMINDERS", reminders });
+  await postToSW({ type: "SCHEDULE_REMINDERS", reminders });
 
-  if (!sentToSW) {
-    // Fallback only if no SW is available (e.g. preview iframe, unsupported browser).
-    scheduleInTabFallback(user, s);
-  } else {
-    // Keep in-tab timer running alongside SW while app is active
-    scheduleInTabFallback(user, s);
+  // Attempt Periodic Sync registration on Android PWA if supported
+  if ("serviceWorker" in navigator) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && "periodicSync" in reg) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (reg as any).periodicSync.register("evia-check-reminders", {
+          minInterval: 24 * 60 * 60 * 1000,
+        });
+      }
+    } catch {}
   }
+
+  // Always keep in-tab timer running alongside SW while app is active
+  scheduleInTabFallback(user, s);
 }
 
 let foregroundListenerAttached = false;
@@ -422,6 +433,18 @@ export function setupMobileForegroundListener(userGetter: () => UserData | null)
   };
   document.addEventListener("visibilitychange", handleCheck);
   window.addEventListener("focus", handleCheck);
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data && event.data.type === "CHECK_DUE_REMINDERS") {
+        const u = userGetter();
+        const s = loadSettings();
+        if (u && s.enabled) {
+          fireDueReminder(u, s);
+        }
+      }
+    });
+  }
 }
 
 /** Convenience: bootstrap reminders from a Profile row. */
@@ -434,3 +457,4 @@ export function bootstrapReminders(profile: Profile | null) {
   fireDueReminder(user, s);
   void scheduleNext(user, s);
 }
+

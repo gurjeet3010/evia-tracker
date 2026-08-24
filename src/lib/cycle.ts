@@ -40,7 +40,18 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 
 export function startOfDay(d: Date | string): Date {
-  const date = typeof d === "string" ? new Date(d) : new Date(d);
+  if (typeof d === "string") {
+    const parts = d.split("T")[0].split("-");
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(day)) {
+        return new Date(y, m, day, 0, 0, 0, 0);
+      }
+    }
+  }
+  const date = new Date(d);
   date.setHours(0, 0, 0, 0);
   return date;
 }
@@ -140,5 +151,18 @@ export function getDayMarker(date: Date, info: CycleInfo): "period" | "ovulation
   if (isSameDay(d, info.ovulationDate)) return "ovulation";
   if (d >= info.fertileStart && d <= info.fertileEnd) return "fertile";
   if (d >= info.pmsStart && d < info.nextPeriodStart) return "pms";
+
+  // Fallback for dates outside current cycle window: calculate dynamically
+  const user: UserData = {
+    lastPeriodDate: info.lastPeriodStart.toISOString().slice(0, 10),
+    cycleLength: info.cycleLength,
+    periodLength: info.periodLength,
+  };
+  const targetInfo = computeCycle(user, d);
+  if (targetInfo.currentDay <= user.periodLength) return "period";
+  if (isSameDay(d, targetInfo.ovulationDate)) return "ovulation";
+  if (d >= targetInfo.fertileStart && d <= targetInfo.fertileEnd) return "fertile";
+  if (d >= targetInfo.pmsStart && d < targetInfo.nextPeriodStart) return "pms";
+
   return null;
 }
